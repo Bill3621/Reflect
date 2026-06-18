@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Reflect',
   description: 'Client-server networking for Flax Engine',
+  base: '/Reflect/',
   lastUpdated: true,
   cleanUrls: true,
 
