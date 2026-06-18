@@ -35,22 +35,23 @@ public class PlayerHealth : NetworkScript
 {
     public readonly SyncVar<int> Health = new(100);
 
-    public void TakeDamage(int amount)
+    // Called by the owning client when they want to respawn
+    public void RequestRespawn()
     {
-        if (!HasAuthority) return;
-        Health.Value -= amount;
-    }
-
-    [ClientRpc]
-    private void RpcOnDeath()
-    {
-        // Runs on all clients
+        SendCommand(nameof(CmdRespawnRequest));
     }
 
     [Command]
     private void CmdRespawnRequest()
     {
-        // Runs on server, called by owning client
+        Health.Value = 100;
+        SendClientRpc(nameof(RpcOnRespawn));
+    }
+
+    [ClientRpc]
+    private void RpcOnRespawn()
+    {
+        // Runs on all clients — play animation, reset UI, etc.
     }
 }
 ```
