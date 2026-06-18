@@ -32,7 +32,7 @@ public override void Setup(BuildOptions options)
 {
     base.Setup(options);
 
-    options.PublicDependencies.Add("Reflect");
+    options.PrivateDependencies.Add("Reflect");
 }
 ```
 
