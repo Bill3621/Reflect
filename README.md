@@ -51,7 +51,7 @@ public class PlayerHealth : NetworkScript
     [ClientRpc]
     private void RpcOnRespawn()
     {
-        // Runs on all clients — play animation, reset UI, etc.
+        // Runs on all clients. Play animation, reset UI, etc.
     }
 }
 ```
