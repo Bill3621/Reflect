@@ -1,0 +1,16 @@
+# Flax build outputs
+Binaries/
+Cache/
+Logs/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# OS
+.DS_Store
+Thumbs.db

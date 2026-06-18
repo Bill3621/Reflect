@@ -1,0 +1,13 @@
+{
+	"Name": "Reflect",
+	"Version": "0.1.0",
+	"Company": "NotherStudios",
+	"Copyright": "Copyright (c) 2026 Bill",
+	"GameTarget": "ReflectTarget",
+	"EditorTarget": "ReflectEditorTarget",
+	"References": [
+		{
+			"Name": "$(EnginePath)/Flax.flaxproj"
+		}
+	]
+}
