@@ -2,6 +2,8 @@
 
 Client-server networking for Flax Engine. Inspired by Unity's [Mirror](https://github.com/MirrorNetworking/Mirror).
 
+[Read the docs](https://bill3621.github.io/Reflect/)
+
 Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to think about sockets, framing, or connection management. It started as the networking code for a multiplayer game, then got extracted into a standalone plugin.
 
 ## What's in here
