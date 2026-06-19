@@ -12,6 +12,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private readonly Dictionary<Guid, Prefab> _prefabs = prefabs;
     private readonly NetworkWriter _w = new();
     private readonly NetworkReader _r = new();
+    
+    private readonly Queue<NetworkConnection> _pendingConns = [];
 
     public readonly Dictionary<uint, NetworkIdentity> Spawned = [];
     public readonly Dictionary<int, NetworkConnection> Connections = [];
@@ -20,7 +22,10 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     
     public bool Active { get; private set; }
     public event Action<NetworkConnection> OnPlayerConnected;
-    public event Action<NetworkConnection> OnPlayerDisconnected;
+    public event Action<NetworkConnection> OnPlayerLoaded;
+    #nullable enable
+    public event Action<NetworkConnection?>? OnPlayerDisconnected;
+    #nullable disable
 
     public void Start()
     {
@@ -56,14 +61,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         Debug.Log($"Client connected with connId={connId}");
         var conn = new NetworkConnection { Id = connId };
         Connections[connId] = conn;
-
-        foreach (var ni in Spawned.Values)
-            SendSpawn(conn, ni);
-        
-        _w.Reset();
-        _w.BeginMessage(MsgType.WelcomeDone);
-        _w.FinishMessage();
-        transport.ServerSend(conn.Id, _w.ToSegment());
+        _pendingConns.Enqueue(conn);
         
         OnPlayerConnected?.Invoke(conn);
     }
@@ -148,6 +146,12 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)
     {
+        if (!_prefabs.ContainsValue(prefab))
+        {
+            Debug.LogError("Prefab is not registered as a spawnable Prefab.");
+            return null;
+        }
+        
         var actor = PrefabManager.SpawnPrefab(prefab, pos, rot);
         var ni = actor.GetScript<NetworkIdentity>();
         if (ni == null)
@@ -238,6 +242,23 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
                 foreach (var conn in Connections.Values.Where(conn => conn.Observing.Contains(ni.NetId)))
                     transport.ServerSend(conn.Id, seg);
             }
+        }
+
+        while (_pendingConns.Count > 0)
+        {
+            var conn = _pendingConns.Dequeue();
+            if (!Connections.ContainsKey(conn.Id))
+                continue;
+            
+            foreach (var ni in Spawned.Values)
+                SendSpawn(conn, ni);
+        
+            _w.Reset();
+            _w.BeginMessage(MsgType.WelcomeDone);
+            _w.FinishMessage();
+            transport.ServerSend(conn.Id, _w.ToSegment());
+            
+            OnPlayerLoaded?.Invoke(conn);
         }
     }
 }
