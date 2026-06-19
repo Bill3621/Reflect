@@ -22,6 +22,8 @@ features:
     details: Reference other networked objects across the wire. Stores a NetId, resolves to the live object on demand. Pass it as an RPC arg or store it in a SyncVar.
   - title: NetworkTransform
     details: Client-authoritative movement with snapshot interpolation, configurable send rate, and movement thresholds built in.
+  - title: Host mode
+    details: Run server and client in one process with StartHost. The client shares the server's spawned objects, so no duplicates. RPCs still flow through normally.
   - title: Swappable transport
     details: An ITransport interface sits between Reflect and the wire. FlaxTransport ships with it (ENet/UDP). LoopbackTransport is there for tests.
   - title: Compact wire format

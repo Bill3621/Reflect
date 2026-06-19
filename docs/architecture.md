@@ -71,6 +71,18 @@ This split exists because spawning the entire world into a new client takes a fu
 
 Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
 
+## Host mode
+
+`StartHost()` starts the server and client in the same process. This is useful for single-player, local co-op, or a listen-server setup where one player hosts and plays.
+
+The naive approach (just running both) has a problem: the server creates objects in the scene, then sends spawn messages to the client, which creates the same objects again. Two copies of everything. Reflect avoids this by sharing state.
+
+When `IsHost` is true, the client's `Spawned` dictionary delegates to the server's. They are the same dictionary. Spawn and despawn messages arriving from the transport are skipped by the client because the server already created (or removed) the object locally. State sync messages are skipped too, since the server's SyncVars are already at their current values in shared memory.
+
+RPCs are the exception. They still go through the transport and arrive via the client's message handler, because RPCs are one-shot events rather than state. The host's commands travel to the server, and the server's ClientRpcs travel back to the host's client, same as any other client.
+
+Ownership in host mode is set directly. When the server calls `SendSpawn` for the host's connection, it sets `IsOwnedLocally` on the `NetworkIdentity` right there instead of writing it to the wire for the client to read back. This is why `NetworkTransform` checks `IsLocalOwner` before applying position from a `CmdMove` on the host: the server already moved the object locally, so applying it again would double the movement.
+
 ## SyncVar dirty tracking
 
 `SyncVar<T>` wraps a value and a dirty flag. Setting `Value` marks the flag only when the new value actually differs from the old one (using `EqualityComparer<T>.Default`). The server walks every spawned `NetworkIdentity` on each tick and calls `SerializeDelta` on scripts that report `AnyDirty`.

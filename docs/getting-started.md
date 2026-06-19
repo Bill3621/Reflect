@@ -108,7 +108,9 @@ YourGame.exe server
 YourGame.exe client
 ```
 
-For testing in the editor, select the `NetworkManager` actor and use the `Start Server` / `Start Client` buttons. There is a `StartHost` method that runs both at once, but it is marked obsolete because the server and client share the same process and you will see spawned objects twice.
+For testing in the editor, select the `NetworkManager` actor and use the `Start Server`, `Start Client`, or `Start Host` buttons. `StartHost` runs both server and client in one process, which is useful for solo testing or listen-server setups. In host mode, the client shares the server's spawned objects instead of creating its own copies, so you will not see duplicates.
+
+See [Architecture](/architecture) for details on how host mode works under the hood.
 
 ## Next steps
 
