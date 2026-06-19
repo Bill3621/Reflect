@@ -57,7 +57,7 @@ public abstract class NetworkScript : Script
         for (var i = 0; i < sv.Length; i++)
         {
             if (!sv[i].IsDirty) continue;
-            sv[i].Serialize(w);
+            sv[i].SerializeDelta(w);
             sv[i].ClearDirty();
         }
     }
@@ -68,16 +68,22 @@ public abstract class NetworkScript : Script
         var mask = sv.Length == 64 ? ulong.MaxValue : (1UL << sv.Length) - 1;
         w.WriteULongVar(mask);
         for (var i = 0; i < sv.Length; i++)
-            sv[i].Serialize(w);
+            sv[i].SerializeFull(w);
     }
 
-    public void Deserialize(NetworkReader r)
+    public void Deserialize(NetworkReader r, bool initialState)
     {
         var sv = SyncVars;
         var mask = r.ReadULongVar();
         for (var i = 0; i < sv.Length; i++)
-            if ((mask & (1UL << i)) != 0)
-                sv[i].Deserialize(r);
+        {
+            if ((mask & (1UL << i)) == 0) continue;
+            
+            if (initialState)
+                sv[i].DeserializeFull(r);
+            else
+                sv[i].DeserializeDelta(r);
+        }
     }
 
     protected void SendCommand(string methodName, params object[] args)

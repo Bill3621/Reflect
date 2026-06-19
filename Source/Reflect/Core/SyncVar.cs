@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using FlaxEngine;
 
 namespace Reflect;
 
@@ -8,8 +7,12 @@ public interface ISyncVar
 {
     bool IsDirty { get; }
     void ClearDirty();
-    void Serialize(NetworkWriter w);
-    void Deserialize(NetworkReader r);
+    
+    void SerializeFull(NetworkWriter w);
+    void SerializeDelta(NetworkWriter w);
+    
+    void DeserializeFull(NetworkReader r);
+    void DeserializeDelta(NetworkReader r);
 }
 
 public sealed class SyncVar<T>(T initial = default, Action<T, T> hook = null) : ISyncVar
@@ -32,9 +35,13 @@ public sealed class SyncVar<T>(T initial = default, Action<T, T> hook = null) : 
 
     public void ClearDirty() => IsDirty = false;
 
-    public void Serialize(NetworkWriter w) => w.Write(_value);
+    public void SerializeFull(NetworkWriter w) => w.Write(_value);
+    public void SerializeDelta(NetworkWriter w) => w.Write(_value);
 
-    public void Deserialize(NetworkReader r)
+    public void DeserializeFull(NetworkReader r) => Apply(r);
+    public void DeserializeDelta(NetworkReader r) => Apply(r);
+
+    private void Apply(NetworkReader r)
     {
         var old = _value;
         _value = r.Read<T>();

@@ -106,7 +106,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         var count = _r.ReadByte();
         var scripts = ni.Scripts;
         for (var i = 0; i < count; i++)
-            scripts[i].Deserialize(_r);
+            scripts[i].Deserialize(_r, true);
 
         foreach (var s in scripts) s.OnNetworkSpawn();
     }
@@ -125,7 +125,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         var netId = _r.ReadUIntVar();
         var compIndex = _r.ReadByte();
         if (Spawned.TryGetValue(netId, out var ni))
-            ni.Scripts[compIndex].Deserialize(_r);
+            ni.Scripts[compIndex].Deserialize(_r, false);
         else
         {
             _r.SkipRemaining(msgEnd);
