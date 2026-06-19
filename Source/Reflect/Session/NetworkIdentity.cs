@@ -18,8 +18,8 @@ public class NetworkIdentity : Script
     [ReadOnly]
     public Guid AssetId;
 
-    public static bool IsServer => NetworkManager.Instance && NetworkManager.Instance.IsServer;
-    public static bool IsClient => NetworkManager.Instance && NetworkManager.Instance.IsClient;
+    public static bool IsServer => NetworkManager.IsServer;
+    public static bool IsClient => NetworkManager.IsClient;
 
     public NetworkConnection Owner { get; internal set; }
 

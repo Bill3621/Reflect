@@ -19,8 +19,9 @@ public class NetworkManager : Script
     
     public event Action OnServerStarted;
     
-    public bool IsServer => Server is { Active: true };
-    public bool IsClient => Client is { Active: true };
+    public static bool IsServer => Instance?.Server is { Active: true };
+    public static bool IsClient => Instance?.Client is { Active: true };
+    public static bool IsHost => IsServer && IsClient;
 
     public NetworkServer Server { get; private set; }
 

@@ -28,9 +28,9 @@ public readonly struct NetworkRef : IEquatable<NetworkRef>
         if (nm == null) return null;
 
         // Look in whichever side(s) we're running.
-        if (nm.IsServer && nm.Server.Spawned.TryGetValue(NetId, out var s))
+        if (NetworkManager.IsServer && nm.Server.Spawned.TryGetValue(NetId, out var s))
             return s;
-        if (nm.IsClient && nm.Client.Spawned.TryGetValue(NetId, out var c))
+        if (NetworkManager.IsClient && nm.Client.Spawned.TryGetValue(NetId, out var c))
             return c;
         return null;
     }

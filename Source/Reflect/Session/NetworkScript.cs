@@ -89,7 +89,7 @@ public abstract class NetworkScript : Script
     protected void SendCommand(string methodName, params object[] args)
     {
         var nm = NetworkManager.Instance;
-        if (nm == null || !nm.IsClient)
+        if (nm == null || !NetworkManager.IsClient)
         {
             Debug.LogError("SendCommand requires an active client.");
             return;
@@ -111,7 +111,7 @@ public abstract class NetworkScript : Script
     protected void SendClientRpc(string methodName, params object[] args)
     {
         var nm = NetworkManager.Instance;
-        if (nm == null || !nm.IsServer)
+        if (nm == null || !NetworkManager.IsServer)
         {
             Debug.LogError("SendClientRpc requires an active server.");
             return;
@@ -133,7 +133,7 @@ public abstract class NetworkScript : Script
     protected void SendTargetRpc(NetworkConnection target, string methodName, params object[] args)
     {
         var nm = NetworkManager.Instance;
-        if (nm == null || !nm.IsServer)
+        if (nm == null || !NetworkManager.IsServer)
         {
             Debug.LogError("SendClientRpc requires an active server.");
             return;
