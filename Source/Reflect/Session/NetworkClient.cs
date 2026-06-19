@@ -9,12 +9,11 @@ namespace Reflect;
 
 public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab> prefabs)
 {
-
-    private readonly ITransport _transport = transport;
-    private readonly Dictionary<Guid, Prefab> _prefabs = prefabs;
     private readonly NetworkReader _r = new();
 
-    public readonly Dictionary<uint, NetworkIdentity> Spawned = [];
+    private readonly Dictionary<uint, NetworkIdentity> _spawned = [];
+    public Dictionary<uint, NetworkIdentity> Spawned =>
+        NetworkManager.IsHost ? NetworkManager.Instance.Server.Spawned : _spawned;
     public readonly Dictionary<ulong, NetworkIdentity> SceneObjects = [];
     
     public bool Active { get; private set; }
@@ -22,18 +21,18 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     public void Connect()
     {
-        _transport.OnClientData += OnData;
-        _transport.OnClientDisconnected += OnDisconnected;
-        _transport.ClientConnect();
+        transport.OnClientData += OnData;
+        transport.OnClientDisconnected += OnDisconnected;
+        transport.ClientConnect();
         Active = true;
         RegisterSceneObjects();
     }
 
     public void Disconnect()
     {
-        _transport.OnClientData -= OnData;
-        _transport.OnClientDisconnected -= OnDisconnected;
-        _transport.ClientDisconnect();
+        transport.OnClientData -= OnData;
+        transport.OnClientDisconnected -= OnDisconnected;
+        transport.ClientDisconnect();
         Active = false;
     }
 
@@ -47,7 +46,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void OnDisconnected() => Disconnect();
     
-    public void Send(ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered) => _transport.ClientSend(data, channelType);
+    public void Send(ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered) => transport.ClientSend(data, channelType);
     
     private void OnData(ArraySegment<byte> data)
     {
@@ -74,6 +73,8 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleSpawn()
     {
+        if (NetworkManager.IsHost) return;
+        
         var netId = _r.ReadUIntVar();
         var assetId = _r.ReadGuid();
         var sceneId = _r.ReadULongVar();
@@ -87,7 +88,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         }
         else
         {
-            if (!_prefabs.TryGetValue(assetId, out var prefab))
+            if (!prefabs.TryGetValue(assetId, out var prefab))
             {
                 Debug.LogError($"No prefab registered for {assetId}");
                 return;
@@ -113,6 +114,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleDespawn()
     {
+        if (NetworkManager.IsHost) return;
         var netId = _r.ReadUIntVar();
         if (!Spawned.TryGetValue(netId, out var ni)) return;
         foreach (var s in ni.Scripts) s.OnNetworkDespawn();
@@ -122,6 +124,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleState(int msgEnd)
     {
+        if (NetworkManager.IsHost) return;
         var netId = _r.ReadUIntVar();
         var compIndex = _r.ReadByte();
         if (Spawned.TryGetValue(netId, out var ni))

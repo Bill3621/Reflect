@@ -62,8 +62,8 @@ public class NetworkManager : Script
         }
     }
 
-    //[Button]
-    [Obsolete("Don't use this please, it causes you to see stuff double because you are the server AND the client so it spawns prefabs for example twice.")]
+    [Button]
+    //[Obsolete("Don't use this please, it causes you to see stuff double because you are the server AND the client so it spawns prefabs for example twice.")]
     public void StartHost()
     {
         StartServer();

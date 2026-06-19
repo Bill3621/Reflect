@@ -107,9 +107,12 @@ public class NetworkTransform : NetworkScript
    [Command(ChannelType = NetworkChannelType.Unreliable)]
    private void CmdMove(Float3 pos, Quaternion rot)
    {
-      // TODO: Server validation?
-      Actor.Position = pos;
-      Actor.Orientation = rot;
+      if (!IsLocalOwner)
+      {
+         // TODO: Server validation?
+         Actor.Position = pos;
+         Actor.Orientation = rot;
+      }
       
       SendClientRpc(nameof(RpcMove), pos, rot, false);
    }

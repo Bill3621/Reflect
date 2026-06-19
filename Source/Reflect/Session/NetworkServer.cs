@@ -207,6 +207,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.Write(new Float3(p.X, p.Y, p.Z));
         _w.Write(ni.Actor.Orientation);
         _w.WriteByte((byte)(conn == ni.Owner ? 1 : 0));
+        if (NetworkManager.IsHost) ni.IsOwnedLocally = conn == ni.Owner;
 
         var scripts = ni.Scripts;
         _w.WriteByte((byte)scripts.Length);
