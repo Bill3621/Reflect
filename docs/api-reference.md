@@ -27,7 +27,8 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `Dictionary<int, NetworkConnection> Connections`
 - `bool Active`
 - `event Action<NetworkConnection> OnPlayerConnected`
-- `event Action<NetworkConnection> OnPlayerDisconnected`
+- `event Action<NetworkConnection> OnPlayerLoaded`
+- `event Action<NetworkConnection?> OnPlayerDisconnected`
 - `void Start()`, `void Stop()`
 - `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)`
 - `void Despawn(NetworkIdentity ni)`
@@ -69,7 +70,7 @@ Abstract base class for all gameplay networking code. Requires a `NetworkIdentit
 - `ISyncVar[] SyncVars` (lazy, sorted by field name, max 64)
 - `bool AnyDirty()`
 - `void SerializeDelta(NetworkWriter w)`, `void SerializeFull(NetworkWriter w)`
-- `void Deserialize(NetworkReader r)`
+- `void Deserialize(NetworkReader r, bool initialState)`
 - `protected void SendCommand(string methodName, params object[] args)`
 - `protected void SendClientRpc(string methodName, params object[] args)`
 - `protected void SendTargetRpc(NetworkConnection target, string methodName, params object[] args)`
@@ -152,12 +153,43 @@ A synchronized value with dirty tracking. Implements `ISyncVar`.
 - `T Value` (marks dirty on change)
 - `bool IsDirty`
 - `void ClearDirty()`
-- `void Serialize(NetworkWriter w)`, `void Deserialize(NetworkReader r)`
+- `void SerializeFull(NetworkWriter w)`, `void SerializeDelta(NetworkWriter w)`
+- `void DeserializeFull(NetworkReader r)`, `void DeserializeDelta(NetworkReader r)`
 - `implicit operator T`
 
 Constructor: `SyncVar<T>(T initial = default, Action<T, T> hook = null)`. The hook receives `(oldValue, newValue)` and fires during deserialization.
 
-`ISyncVar` interface: `bool IsDirty`, `void ClearDirty()`, `void Serialize(NetworkWriter)`, `void Deserialize(NetworkReader)`.
+`ISyncVar` interface: `bool IsDirty`, `void ClearDirty()`, `void SerializeFull(NetworkWriter)`, `void SerializeDelta(NetworkWriter)`, `void DeserializeFull(NetworkReader)`, `void DeserializeDelta(NetworkReader)`.
+
+### SyncList&lt;T&gt;
+
+A synchronized list with operation-level delta tracking. Implements `ISyncVar` and `IReadOnlyList<T>`.
+
+- `T this[int index]` (get + set, set records an op)
+- `int Count`
+- `void Add(T)`, `void Insert(int, T)`, `void RemoveAt(int)`, `bool Remove(T)`, `void Clear()`
+- `int IndexOf(T)`, `bool Contains(T)`
+- `event Action<int, T> OnAdd`
+- `event Action<int, T, T> OnSet`
+- `event Action<int, T> OnRemove`
+- `event Action OnClear`
+
+Full serialization writes the entire list. Delta serialization writes the operation log (add, insert, set, removeAt, clear) since the last tick. Events fire on the client during `DeserializeDelta`.
+
+### SyncDictionary&lt;TKey, TValue&gt;
+
+A synchronized dictionary with operation-level delta tracking. Implements `ISyncVar` and `IReadOnlyDictionary<TKey, TValue>`.
+
+- `TValue this[TKey key]` (get + set, set records an op)
+- `void Add(TKey, TValue)`, `bool Remove(TKey)`, `void Clear()`
+- `bool ContainsKey(TKey)`, `bool ContainsValue(TValue)`, `bool TryGetValue(TKey, out TValue)`
+- `int Count`
+- `IEnumerable<TKey> Keys`, `IEnumerable<TValue> Values`
+- `event Action<TKey, TValue> OnSet`
+- `event Action<TKey, TValue> OnRemove`
+- `event Action OnClear`
+
+Full serialization writes every key-value pair. Delta serialization writes the operation log (set, remove, clear) since the last tick. Events fire on the client during `DeserializeDelta`.
 
 ### NetworkRef
 

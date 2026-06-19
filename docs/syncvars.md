@@ -1,6 +1,6 @@
 # SyncVars
 
-A `SyncVar<T>` is a field that the server automatically synchronizes to clients. You declare it on a `NetworkScript`, assign to its `Value`, and Reflect takes care of tracking changes and shipping deltas.
+Reflect gives you three synchronized field types: `SyncVar<T>` for single values, `SyncList<T>` for ordered collections, and `SyncDictionary<TKey, TValue>` for keyed lookups. All three implement `ISyncVar`, which means the server tracks their changes and ships deltas to clients automatically.
 
 ## Declaring a SyncVar
 
@@ -58,7 +58,7 @@ On spawn, the server sends every SyncVar on every script. This is full serializa
 
 On each sync tick, the server sends only what changed. This is delta serialization. It writes a 64-bit mask where only the dirty SyncVars have their bit set, then only those values, in index order.
 
-`NetworkScript.SerializeDelta` builds the mask, writes dirty values, and clears their flags. `SerializeFull` writes the mask and all values without touching the flags. `Deserialize` reads the mask and applies only the set bits, then fires change hooks for values that actually changed.
+`NetworkScript.SerializeDelta` builds the mask, writes dirty values, and clears their flags. `SerializeFull` writes the mask and all values without touching the flags. On the receiving side, `Deserialize(NetworkReader, bool initialState)` reads the mask and applies only the set bits. When `initialState` is true (spawn), it calls `DeserializeFull`. When false (state tick), it calls `DeserializeDelta`.
 
 The mask is always present, even in a delta with no changes. A client reading a state message always knows which SyncVars to expect by reading the mask first.
 
@@ -77,3 +77,95 @@ If you need more than 64 synchronized values on one object, split them across mu
 ## Field ordering
 
 Reflect discovers SyncVars by reflecting over the fields of your script type. It orders them by name using `StringComparer.Ordinal` and assigns each one its bit position in that order. Renaming a field shifts its position, which changes which bit it maps to. Keep your SyncVar field names stable across versions for the same reason you keep RPC names stable.
+
+## SyncList
+
+`SyncList<T>` is a synchronized list. It behaves like a regular `List<T>` but records every mutation as an operation (add, insert, set, remove, clear). The server ships those operations to clients, who apply them in order.
+
+Declare it as a readonly field, same as SyncVar:
+
+```csharp
+public class MatchManager : NetworkScript
+{
+    public readonly SyncList<string> Scoreboard = new();
+}
+```
+
+Mutate the list on the server through the standard methods (`Add`, `Insert`, `RemoveAt`, `Remove`, `Clear`, the indexer setter). Each mutation appends to an internal operation log. On the next sync tick, the log is serialized and sent to observing clients, then cleared.
+
+```csharp
+if (IsServer)
+{
+    Scoreboard.Add("Alice: 3");
+    Scoreboard.Add("Bob: 1");
+    Scoreboard[0] = "Alice: 4";   // updates the first entry
+}
+```
+
+Clients never write to the list directly. They receive delta operations through `DeserializeDelta`, which applies them and fires events:
+
+```csharp
+Scoreboard.OnAdd += (index, value) => Debug.Log($"Entry {index}: {value}");
+Scoreboard.OnSet += (index, old, current) => Debug.Log($"Entry {index} changed: {old} -> {current}");
+Scoreboard.OnRemove += (index, value) => Debug.Log($"Removed {value} at {index}");
+Scoreboard.OnClear += () => Debug.Log("Scoreboard cleared");
+```
+
+On spawn (full serialization), the server writes the entire list. On each tick (delta serialization), it writes only the operations since the last tick. The element type `T` must have a registered serializer.
+
+`SyncList<T>` implements `IReadOnlyList<T>`, so you can iterate and index it on any side. Only the server should mutate it.
+
+## SyncDictionary
+
+`SyncDictionary<TKey, TValue>` works the same way but for keyed collections. Mutations are tracked as set, remove, and clear operations.
+
+```csharp
+public class LobbyManager : NetworkScript
+{
+    public readonly SyncDictionary<uint, string> PlayerNames = new();
+}
+```
+
+Write through the indexer or `Add` on the server. Both record a set operation:
+
+```csharp
+if (IsServer)
+{
+    PlayerNames[conn.Id] = "Alice";
+    PlayerNames.Remove(conn.Id);
+}
+```
+
+Events fire on the client during deserialization:
+
+```csharp
+PlayerNames.OnSet += (key, value) => Debug.Log($"{key} -> {value}");
+PlayerNames.OnRemove += (key, value) => Debug.Log($"Removed {value} ({key})");
+PlayerNames.OnClear += () => Debug.Log("Cleared");
+```
+
+Full serialization on spawn writes every key-value pair. Delta serialization writes only the set and remove operations since the last tick. Both `TKey` and `TValue` must have registered serializers.
+
+`SyncDictionary<TKey, TValue>` implements `IReadOnlyDictionary<TKey, TValue>`.
+
+## The ISyncVar contract
+
+All three types implement `ISyncVar`, which is the interface Reflect uses to discover, serialize, and deserialize synchronized fields:
+
+```csharp
+public interface ISyncVar
+{
+    bool IsDirty { get; }
+    void ClearDirty();
+
+    void SerializeFull(NetworkWriter w);
+    void SerializeDelta(NetworkWriter w);
+
+    void DeserializeFull(NetworkReader r);
+    void DeserializeDelta(NetworkReader r);
+}
+```
+
+`SerializeFull` / `DeserializeFull` handle the initial spawn (write everything, read everything). `SerializeDelta` / `DeserializeDelta` handle incremental updates (write only what changed, read and apply the changes). `SyncVar<T>` uses the same wire format for both because a single value has no structure to optimize. `SyncList<T>` and `SyncDictionary<TKey, TValue>` use the full path for initial state and the operation log for deltas.
+
+You can implement `ISyncVar` on your own type if you need a custom synchronized structure. Declare it as a field on your `NetworkScript` and Reflect will pick it up automatically.

@@ -59,13 +59,27 @@ At runtime, `SendCommand` (or `SendClientRpc` / `SendTargetRpc`) looks up the me
 
 The ordinal sort is what keeps IDs stable. As long as method names do not collide across your inheritance chain, the ID for a given method name is the same on every machine. Renaming a method changes its sort position and therefore its ID, which breaks compatibility with older builds.
 
+## Connection lifecycle
+
+When a client connects, two things happen in sequence, and they fire different events.
+
+`OnPlayerConnected` fires immediately. The connection is registered and its `NetworkConnection` object is in the `Connections` dictionary. But the client does not yet know about any spawned objects. The server queues the connection as pending.
+
+On the next `Update` tick, the server drains the pending queue. For each pending connection, it sends a `Spawn` message for every existing object in the world, then sends `WelcomeDone`. After that, `OnPlayerLoaded` fires.
+
+This split exists because spawning the entire world into a new client takes a full update tick. If `OnPlayerConnected` fired after the world was sent, gameplay code waiting for "player joined" would race against the spawn messages arriving on the client. The two-event model lets you react to the raw connection immediately (`OnPlayerConnected`) and to the ready-to-play state when the client has the full world (`OnPlayerLoaded`).
+
+Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
+
 ## SyncVar dirty tracking
 
 `SyncVar<T>` wraps a value and a dirty flag. Setting `Value` marks the flag only when the new value actually differs from the old one (using `EqualityComparer<T>.Default`). The server walks every spawned `NetworkIdentity` on each tick and calls `SerializeDelta` on scripts that report `AnyDirty`.
 
 Delta serialization is a 64-bit mask. Reflect collects the dirty SyncVars on a script, sets the corresponding bits in a `ulong`, and writes the mask followed by only the dirty values. After writing, each dirty SyncVar clears its flag. Full serialization (used on spawn) writes the mask with all bits set for that script's SyncVar count, then every value. Because the mask is 64 bits wide, a single `NetworkScript` supports at most 64 SyncVars.
 
-See [SyncVars](/syncvars) for the API and change hooks.
+`SyncList<T>` and `SyncDictionary<TKey, TValue>` use the same dirty-mask slot as a regular `SyncVar<T>`, but their delta format is an operation log rather than a single value. The list tracks add, insert, set, removeAt, and clear. The dictionary tracks set, remove, and clear. Both clear their operation log after each delta serialization.
+
+See [SyncVars](/syncvars) for the API, change hooks, and collection types.
 
 ## NetworkTransform snapshots
 
