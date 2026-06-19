@@ -36,6 +36,8 @@ public static class Serializers
 
         Reg<Float3>((w, v) => { w.WriteFloat(v.X); w.WriteFloat(v.Y); w.WriteFloat(v.Z); }, r => new Float3(r.ReadFloat(), r.ReadFloat(), r.ReadFloat()));
         Reg<Quaternion>((w, v) => { w.WriteFloat(v.X); w.WriteFloat(v.Y); w.WriteFloat(v.Z); w.WriteFloat(v.W); }, r => new Quaternion(r.ReadFloat(), r.ReadFloat(), r.ReadFloat(), r.ReadFloat()));
+
+        Reg<NetworkRef>((w, v) => w.WriteUIntVar(v.NetId), r => new NetworkRef(r.ReadUIntVar()));
     }
 
     private static void Reg<T>(WriteFunc<T> w, ReadFunc<T> r)
