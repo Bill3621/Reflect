@@ -51,3 +51,8 @@ _ReSharper*/
 
 # Ignore Nuget packages folder
 packages/
+
+# Ignore VitePress docs build artifacts
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
