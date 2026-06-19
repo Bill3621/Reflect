@@ -81,7 +81,7 @@ Each message picks a `NetworkChannelType`. This is a Flax enum with four values:
 
 - `ReliableOrdered` is the default for almost everything. State sync, RPCs, spawn, and despawn all use it. Messages arrive, in order, and are retried until acknowledged.
 - `ReliableUnordered` gives reliability without ordering guarantees. Useful when order does not matter but loss is unacceptable.
-- `Unreliable` drops messages that do not arrive and does not order them. `NetworkTransform` uses this for movement so a stale position update never blocks a fresh one.
-- `UnreliableUnordered` is the rawest option with no ordering and no reliability.
+- `Unreliable` drops messages that do not arrive. No ordering or retransmission.
+- `UnreliableOrdered` drops lost messages but orders the ones that do arrive by sequence number.
 
 The rule of thumb is simple. Game state that must arrive goes reliable ordered. High-frequency data where the latest value is all that matters (position, rotation, voice) goes unreliable.

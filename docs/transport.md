@@ -104,7 +104,7 @@ The `channelType` parameter on send methods maps to Flax's `NetworkChannelType` 
 | `ReliableOrdered` | Yes | Yes | State sync, RPCs, spawn, despawn (the default) |
 | `ReliableUnordered` | Yes | No | Reliable messages where order does not matter |
 | `Unreliable` | No | No | Transform updates, voice, any high-frequency latest-value data |
-| `UnreliableUnordered` | No | No | Raw unreliable sends with no guarantees |
+| `UnreliableOrdered` | No | Yes | Unreliable sends with sequence ordering |
 
 `ReliableOrdered` is the default everywhere in Reflect. Override it on a per-RPC basis through the attribute's `ChannelType` property, or pass it explicitly when calling transport methods directly.
 
