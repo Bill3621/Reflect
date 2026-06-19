@@ -18,8 +18,8 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 │  │  Identity    │  ┌────────────────────┐    │
 │  │  Script      │  │      Transport      │    │
 │  │  RpcRegistry │  │  ITransport (iface) │    │
-│  └──────┬───────┘  │  FlaxTransport      │    │
-│         │          │  LoopbackTransport  │    │
+│  │  NetworkRef  │  │  FlaxTransport      │    │
+│  └──────┬───────┘  │  LoopbackTransport  │    │
 │  ┌──────┴───────┐  └────────────────────┘    │
 │  │    Core       │                           │
 │  │  Writer/Reader│                           │
@@ -33,7 +33,7 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 
 Your game scripts are plain `NetworkScript` subclasses. They declare `SyncVar<T>` fields and methods marked with RPC attributes. Reflect never asks you to touch sockets or frames. Everything below your scripts is the plugin.
 
-The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
+The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`, `NetworkRef`) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
 
 ## The transport abstraction
 
@@ -74,6 +74,24 @@ See [SyncVars](/syncvars) for the API and change hooks.
 Movement updates use the unreliable channel. Each client that is not the owner keeps a small ring buffer of snapshots and interpolates between them. The `InterpolationDelay` field (default 0.1 seconds) renders the object slightly in the past, which smooths out jitter and packet loss. Two thresholds (`PositionThreshold`, `RotationThreshold`) suppress updates when the object has barely moved, so a stationary object does not spam the network.
 
 A teleport path clears the snapshot buffer and snaps the object directly, which avoids the interpolation system dragging the object across the map after a jump.
+
+## Referencing objects across the network
+
+Sometimes a script needs to point at another networked object. Maybe a projectile tracks its target, or a player holds a reference to the flag they are carrying. You cannot send a `NetworkIdentity` reference over the wire because the object on the other side lives at a different memory address (or may not exist yet).
+
+`NetworkRef` solves this. It is a small readonly struct that stores a `NetId` and resolves to the live `NetworkIdentity` on demand. You create one from any `NetworkIdentity` or `NetworkScript` via the implicit conversion operators, pass it as an RPC argument or store it in a SyncVar, and call `Resolve()` on the receiving side to get the real object back.
+
+```csharp
+[Command]
+private void CmdAssignTarget(NetworkRef target)
+{
+    var enemy = target.Resolve<EnemyHealth>();
+    if (enemy != null)
+        enemy.TakeDamage(10);
+}
+```
+
+`Resolve()` checks the spawned dictionary every time you call it. It does not cache, so it stays correct if the target despawns and something else takes its `NetId`. If the object has not spawned on this peer yet, `Resolve()` returns `null`, so null-check the result.
 
 ## Channel types
 

@@ -18,6 +18,8 @@ features:
     details: Three attributes cover the common cases. [Command] goes client to server, [ClientRpc] fans out to all clients, [TargetRpc] hits a single connection.
   - title: SyncVars
     details: SyncVar<T> tracks its own dirty state and serializes deltas with a 64-bit mask, so you only send what changed.
+  - title: NetworkRef
+    details: Reference other networked objects across the wire. Stores a NetId, resolves to the live object on demand. Pass it as an RPC arg or store it in a SyncVar.
   - title: NetworkTransform
     details: Client-authoritative movement with snapshot interpolation, configurable send rate, and movement thresholds built in.
   - title: Swappable transport

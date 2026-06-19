@@ -143,7 +143,7 @@ Static registry and initializer for the built-in type serializers.
 - `static void WriteBoxed(NetworkWriter w, Type t, object v)`
 - `static object ReadBoxed(NetworkReader r, Type t)`
 
-Built-in types: `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`.
+Built-in types: `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, `NetworkRef`.
 
 ### SyncVar&lt;T&gt;
 
@@ -158,6 +158,21 @@ A synchronized value with dirty tracking. Implements `ISyncVar`.
 Constructor: `SyncVar<T>(T initial = default, Action<T, T> hook = null)`. The hook receives `(oldValue, newValue)` and fires during deserialization.
 
 `ISyncVar` interface: `bool IsDirty`, `void ClearDirty()`, `void Serialize(NetworkWriter)`, `void Deserialize(NetworkReader)`.
+
+### NetworkRef
+
+A serializable reference to a networked object. On the wire it stores a `NetId`. When you resolve it, it looks up the live `NetworkIdentity` in whichever side is running (server or client).
+
+- `uint NetId` (readonly)
+- `bool IsNull`
+- `NetworkIdentity Resolve()`
+- `T Resolve<T>() where T : NetworkScript`
+- `implicit operator NetworkRef(NetworkIdentity)`
+- `implicit operator NetworkRef(NetworkScript)`
+
+Construct from a `NetworkIdentity` or `NetworkScript`, or pass a raw `NetId`. `Resolve()` re-checks the spawned dictionary every call, so it stays correct after a despawn and respawn. Returns `null` if the target does not exist on this peer yet.
+
+`Resolve<T>()` is a shortcut that resolves the identity and calls `GetScript<T>()` on its actor in one step.
 
 ### MsgType
 

@@ -56,7 +56,7 @@ Three protected methods on `NetworkScript` do the sending. Each takes the method
 - `SendClientRpc(string methodName, params object[] args)` sends a `[ClientRpc]` from the server to all observing clients.
 - `SendTargetRpc(NetworkConnection target, string methodName, params object[] args)` sends a `[TargetRpc]` from the server to one connection.
 
-Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, and `Quaternion`. Passing a type with no registered serializer throws at send time.
+Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, and `NetworkRef`. Passing a type with no registered serializer throws at send time.
 
 `SendCommand` requires an active client. The other two require an active server. If the precondition is not met, Reflect logs an error and returns.
 
@@ -111,6 +111,25 @@ private void CmdMove(Float3 pos, Quaternion rot)
 ```
 
 Use unreliable channels for high-frequency data where only the latest value matters and a dropped packet is harmless. Use reliable ordered (the default) for anything that must arrive and must be processed in sequence.
+
+## Passing object references
+
+RPCs are not limited to primitives. `NetworkRef` lets you pass a reference to another networked object as an argument. On the wire it is just a `NetId` (a varint), and the receiver resolves it to the live object.
+
+```csharp
+// Server tells a client which player they killed
+[TargetRpc]
+private void TargetKillFeed(NetworkRef victim)
+{
+    var health = victim.Resolve<PlayerHealth>();
+    Debug.Log($"You killed {health.DisplayName}");
+}
+
+// Call it:
+SendTargetRpc(playerConnection, nameof(TargetKillFeed), victimIdentity);
+```
+
+The implicit conversion from `NetworkIdentity` to `NetworkRef` means you can pass the identity directly and the compiler handles the rest. If the target has not spawned on the receiving peer, `Resolve()` returns `null`.
 
 ## How IDs are assigned
 
