@@ -4,7 +4,7 @@ using FlaxEngine;
 
 namespace Reflect;
 
-public class NetworkManager : Script
+public class NetworkManager : GamePlugin
 {
     public static NetworkManager Instance { get; private set; }
 
@@ -31,26 +31,18 @@ public class NetworkManager : Script
     private Dictionary<Guid, Prefab> _registry;
     private float _accum;
 
-    public override void OnAwake()
+    public override void Initialize()
     {
         Instance = this;
+        Scripting.Update += OnUpdate;
         Serializers.Init();
 
-        _registry = new Dictionary<Guid, Prefab>();
-        if(SpawnablePrefabs != null)
-            foreach (var prefab in SpawnablePrefabs)
-                if (prefab)
-                    _registry[prefab.ID] = prefab;
-
-        _transport = new FlaxTransport
-        {
-            Address = Address,
-            Port = Port,
-            MaxConnections = MaxConnections,
-        };
+        RebuildPrefabRegistry();
+        RebuildTransport();
     }
 
-    public override void OnStart()
+    private bool _hasStarted;
+    private void OnStart()
     {
         var args = Engine.CommandLine;
         if (args.Contains("server"))
@@ -62,8 +54,28 @@ public class NetworkManager : Script
         }
     }
 
+    public void RebuildPrefabRegistry()
+    {
+        _registry = new Dictionary<Guid, Prefab>();
+        if (SpawnablePrefabs == null) return;
+        foreach (var prefab in SpawnablePrefabs)
+            if (prefab)
+                _registry[prefab.ID] = prefab;
+    }
+    
     [Button]
-    //[Obsolete("Don't use this please, it causes you to see stuff double because you are the server AND the client so it spawns prefabs for example twice.")]
+    public void RebuildTransport()
+    {
+        _transport = new FlaxTransport
+        {
+            Address = Address,
+            Port = Port,
+            MaxConnections = MaxConnections,
+        };
+    }
+    
+    [Button]
+    [Obsolete("Some scripts might need to be adapted to work properly with this mode")]
     public void StartHost()
     {
         StartServer();
@@ -85,8 +97,14 @@ public class NetworkManager : Script
         Client.Connect();
     }
 
-    public override void OnUpdate()
+    private void OnUpdate()
     {
+        if (!_hasStarted)
+        {
+            _hasStarted = true;
+            OnStart();
+        } 
+        
         _transport?.Poll();
 
         if (!IsServer) return;
@@ -97,8 +115,9 @@ public class NetworkManager : Script
         _transport?.Poll();
     }
 
-    public override void OnDestroy()
+    public override void Deinitialize()
     {
+        Scripting.Update -= OnUpdate;
         Client?.Disconnect();
         Server?.Stop();
         if (Instance == this) Instance = null;
