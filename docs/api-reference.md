@@ -6,7 +6,7 @@ This is a quick map of the public types in the `Reflect` namespace and what they
 
 ### NetworkManager
 
-A Flax `Script` that owns the transport, server, and client. Add it to a scene actor. Holds a static `Instance`.
+A Flax `Script` that owns the transport, server, and client. Add it to a scene actor. Holds a static `Instance`. `StartHost()` runs both server and client in one process for local play.
 
 - `static NetworkManager Instance`
 - `Prefab[] SpawnablePrefabs`
@@ -15,9 +15,9 @@ A Flax `Script` that owns the transport, server, and client. Add it to a scene a
 - `ushort Port` (default 7777)
 - `ushort MaxConnections` (default 16)
 - `event Action OnServerStarted`
-- `bool IsServer`, `bool IsClient`
+- `static bool IsServer`, `static bool IsClient`, `static bool IsHost`
 - `NetworkServer Server`, `NetworkClient Client`
-- `void StartServer()`, `void StartClient()`
+- `void StartServer()`, `void StartClient()`, `void StartHost()`
 
 ### NetworkServer
 
@@ -40,12 +40,14 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 
 Created by `NetworkManager`. Manages spawned objects and incoming messages on the client.
 
-- `Dictionary<uint, NetworkIdentity> Spawned`
+- `Dictionary<uint, NetworkIdentity> Spawned` (in host mode, returns the server's `Spawned` dict)
 - `Dictionary<ulong, NetworkIdentity> SceneObjects`
 - `bool Active`
 - `event Action OnReady`
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
+
+In host mode, spawn, despawn, and state messages are skipped because the server already created and owns the objects. RPCs still flow through normally.
 
 ### NetworkIdentity
 
