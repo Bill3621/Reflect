@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using FlaxEngine;
 using FlaxEngine.Networking;
+using Debug = FlaxEngine.Debug;
 using Object = FlaxEngine.Object;
 
 namespace Reflect;
@@ -17,6 +19,10 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     public readonly Dictionary<uint, NetworkIdentity> Spawned = [];
     public readonly Dictionary<int, NetworkConnection> Connections = [];
 
+    public IInterestManagement Interest = new GlobalInterest();
+    private readonly Stopwatch _rebuildTimer = Stopwatch.StartNew();
+    public float RebuildInterval = 1.0f;
+    
     private uint _nextNetId = 1;
     
     public bool Active { get; private set; }
@@ -77,9 +83,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     public void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
     {
-        foreach (var conn in Connections.Values)
-            if (conn.Observing.Contains(ni.NetId))
-                transport.ServerSend(conn.Id, data, channelType);
+        foreach (var conn in Connections.Values.Where(conn => conn.Observing.Contains(ni.NetId)))
+            transport.ServerSend(conn.Id, data, channelType);
     }
 
     public void SendToConnection(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
@@ -166,10 +171,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         Spawned[ni.NetId] = ni;
         
         foreach(var s in ni.Scripts) s.OnNetworkSpawn();
-        
-        foreach(var conn in Connections.Values)
-            SendSpawn(conn, ni);
 
+        RebuildObservers();
         return ni;
     }
 
@@ -181,11 +184,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.BeginMessage(MsgType.Despawn);
         _w.WriteUIntVar(ni.NetId);
         _w.FinishMessage();
-        foreach (var conn in Connections.Values)
-        {
+        foreach (var conn in Connections.Values.Where(conn => conn.Observing.Remove(ni.NetId)))
             transport.ServerSend(conn.Id, _w.ToSegment());
-            conn.Observing.Remove(ni.NetId);
-        }
         
         foreach(var s in ni.Scripts) s.OnNetworkDespawn();
         Spawned.Remove(ni.NetId);
@@ -223,6 +223,12 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public void Update()
     {
+        if (_pendingConns.Count > 0 || _rebuildTimer.ElapsedMilliseconds >= RebuildInterval * 1000)
+        {
+            RebuildObservers();
+            _rebuildTimer.Restart();
+        }
+        
         foreach (var ni in Spawned.Values)
         {
             if(!ni.AnyDirty()) continue;
@@ -243,16 +249,12 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
                     transport.ServerSend(conn.Id, seg);
             }
         }
-
+        
         while (_pendingConns.Count > 0)
         {
             var conn = _pendingConns.Dequeue();
             if (!Connections.ContainsKey(conn.Id))
                 continue;
-            
-            foreach (var ni in Spawned.Values)
-                SendSpawn(conn, ni);
-        
             _w.Reset();
             _w.BeginMessage(MsgType.WelcomeDone);
             _w.FinishMessage();
@@ -260,5 +262,50 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             
             OnPlayerLoaded?.Invoke(conn);
         }
+    }
+    
+    private readonly List<NetworkIdentity> _allCache = [];
+    private readonly HashSet<uint> _desired = [];
+    private readonly List<uint> _toAdd = [];
+    private readonly List<uint> _toRemove = [];
+    public void RebuildObservers()
+    {
+        _allCache.Clear();
+        _allCache.AddRange(Spawned.Values);
+        Interest.Rebuild(_allCache);
+
+        foreach (var conn in Connections.Values)
+        {
+            _desired.Clear();
+            Interest.GatherVisible(conn, _desired);
+            
+            _toAdd.Clear();
+            foreach (var netId in _desired.Where(netId => !conn.Observing.Contains(netId)))
+                _toAdd.Add(netId);
+            
+            _toRemove.Clear();
+            foreach(var netId in conn.Observing.Where(netId => !conn.Observing.Contains(netId)))
+                _toRemove.Add(netId);
+            
+            foreach(var netId in _toAdd)
+                if(Spawned.TryGetValue(netId, out var ni))
+                    SendSpawn(conn, ni);
+
+            foreach (var netId in _toRemove)
+            {
+                SendHide(conn, netId);
+                conn.Observing.Remove(netId);
+            }
+        }
+    }
+
+    private void SendHide(NetworkConnection conn, NetworkIdentity ni) => SendHide(conn, ni.NetId);
+    private void SendHide(NetworkConnection conn, uint netId)
+    {
+        _w.Reset();
+        _w.BeginMessage(MsgType.Despawn);
+        _w.WriteUIntVar(netId);
+        _w.FinishMessage();
+        transport.ServerSend(conn.Id, _w.ToSegment());  
     }
 }

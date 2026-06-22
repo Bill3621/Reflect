@@ -87,7 +87,10 @@ public class NetworkManager : GamePlugin
     [Button]
     public void StartServer()
     {
-        Server = new NetworkServer(_transport, _registry);
+        Server = new NetworkServer(_transport, _registry)
+        {
+            Interest = new GridInterest()
+        };
         Server.Start();
         OnServerStarted?.Invoke();
     }
