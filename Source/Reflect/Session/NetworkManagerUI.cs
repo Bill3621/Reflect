@@ -25,13 +25,14 @@ public class NetworkManagerUI : Script
 
     private void RebuildNetworkManager()
     {
-        NetworkManager.Instance?.SpawnablePrefabs = SpawnablePrefabs;
-        NetworkManager.Instance?.SyncInterval = SyncInterval;
-        NetworkManager.Instance?.Address = Address;
-        NetworkManager.Instance?.Port = Port;
-        NetworkManager.Instance?.MaxConnections = MaxConnections;
-        NetworkManager.Instance?.RebuildPrefabRegistry();
-        NetworkManager.Instance?.RebuildTransport();
+        if (NetworkManager.Instance == null) return;
+        NetworkManager.Instance.SpawnablePrefabs = SpawnablePrefabs;
+        NetworkManager.Instance.SyncInterval = SyncInterval;
+        NetworkManager.Instance.Address = Address;
+        NetworkManager.Instance.Port = Port;
+        NetworkManager.Instance.MaxConnections = MaxConnections;
+        NetworkManager.Instance.RebuildPrefabRegistry();
+        NetworkManager.Instance.RebuildTransport();
     }
     
     [Button]
@@ -39,26 +40,26 @@ public class NetworkManagerUI : Script
     public void StartHost()
     {
         RebuildNetworkManager();
-        NetworkManager.Instance?.StartHost();
+        NetworkManager.Instance.StartHost();
     }
 
     [Button]
     public void StartServer()
     {
         RebuildNetworkManager();
-        NetworkManager.Instance?.StartServer();
+        NetworkManager.Instance.StartServer();
     }
     
     [Button]
     public void StartClient()
     {
         RebuildNetworkManager();
-        NetworkManager.Instance?.StartClient();
+        NetworkManager.Instance.StartClient();
     }
     
     [Button]
-    public void StopServer() => NetworkManager.Instance?.Server?.Stop();
+    public void StopServer() => NetworkManager.Instance.Server.Stop();
     [Button]
-    public void StopClient() => NetworkManager.Instance?.Client?.Disconnect();
+    public void StopClient() => NetworkManager.Instance.Client.Disconnect();
     
 }
