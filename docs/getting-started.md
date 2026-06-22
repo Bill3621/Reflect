@@ -53,14 +53,14 @@ Do the same for your editor target (`GameProjectEditorTarget`). After that, rege
 
 ## Set up the NetworkManager
 
-`NetworkManager` is a Flax `Script`. Add it to an actor in your main scene, or spawn it at runtime. It exposes a few fields in the inspector:
+`NetworkManager` is a Flax `GamePlugin`, so it initializes at the plugin level, not per-scene. To configure it from the editor, add a `NetworkManagerUI` script to an actor in your scene. `NetworkManagerUI` exposes the inspector fields and editor buttons:
 
 - `Address` and `Port` for the connection endpoint (defaults `127.0.0.1:7777`).
 - `MaxConnections` for the server cap (default 16).
 - `SyncInterval` controls how often the server pushes SyncVar deltas, in seconds (default 0.1).
 - `SpawnablePrefabs` is an array of prefabs that can be spawned over the network. Each prefab must have a `NetworkIdentity` component on its root.
 
-On awake, `NetworkManager` creates a `FlaxTransport` from those settings and holds a static `Instance` reference. On start it checks the command line for `server` or `client` and boots accordingly. You can also call `StartServer()` or `StartClient()` yourself (both have `[Button]` so they show up in the inspector).
+`NetworkManagerUI` waits a short delay after the scene loads (0.25s), pushes its settings into the `NetworkManager` singleton, then calls `OnStart()` which checks the command line for `server` or `client`. You can also use the `Start Server`, `Start Client`, and `Start Host` buttons on the `NetworkManagerUI` actor in the inspector.
 
 ## Write a NetworkScript
 
@@ -108,7 +108,7 @@ YourGame.exe server
 YourGame.exe client
 ```
 
-For testing in the editor, select the `NetworkManager` actor and use the `Start Server`, `Start Client`, or `Start Host` buttons. `StartHost` runs both server and client in one process, which is useful for solo testing or listen-server setups. In host mode, the client shares the server's spawned objects instead of creating its own copies, so you will not see duplicates.
+For testing in the editor, select the `NetworkManagerUI` actor and use the `Start Server`, `Start Client`, or `Start Host` buttons. `StartHost` runs both server and client in one process, which is useful for solo testing or listen-server setups. In host mode, the client shares the server's spawned objects instead of creating its own copies, so you will not see duplicates.
 
 See [Architecture](/architecture) for details on how host mode works under the hood.
 

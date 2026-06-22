@@ -59,16 +59,6 @@ public sealed class DistanceInterest : IInterestManagement
             result.Add(p.Key);
     }
 
-    public bool IsVisible(NetworkIdentity ni, NetworkConnection conn)
-    {
-        if (ni.Owner == conn) return true;
-
-        var character = conn.OwnedPlayer;
-        if (character == null) return false;
-
-        const float sqr = Range * Range;
-        return Vector3.DistanceSquared(ni.Actor.Position, character.Actor.Position) <= sqr;
-    }
 }
 
 public sealed class GridInterest : IInterestManagement
@@ -127,15 +117,4 @@ public sealed class GridInterest : IInterestManagement
         result.Add(view.NetId);
     }
 
-    public bool IsVisible(NetworkIdentity ni, NetworkConnection conn)
-    {
-        if (ni.Owner == conn) return true;
-        var view = conn.OwnedPlayer;
-        if (view == null) return false;
-
-        var (ox, oz) = CellOf(ni.Actor.Position);
-        var (vx, vz) = CellOf(view.Actor.Position);
-        
-        return Mathf.Abs(ox - vx) <= ViewRadiusInCells && Mathf.Abs(oz - vz) <= ViewRadiusInCells;
-    }
 }

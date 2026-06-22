@@ -11,8 +11,11 @@ Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to t
 - `ITransport` interface with two implementations: `FlaxTransport` (ENet/UDP) and `LoopbackTransport` (in-process, for testing)
 - RPC attributes: `[Command]` (client to server), `[ClientRpc]` (server to all), `[TargetRpc]` (server to one). Each RPC picks its own channel type and authority requirements.
 - `SyncVar<T>` with dirty tracking and delta serialization
+- `SyncList<T>` and `SyncDictionary<TKey, TValue>` with operation-level delta tracking, plus read-only inspector editors
 - `NetworkIdentity` and `NetworkScript` for spawn/despawn lifecycle on prefabs
 - `NetworkTransform` with client-authoritative movement, snapshot interpolation, configurable send rate, and movement thresholds
+- Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects they can actually see
+- `NetworkManagerUI` script for inspector-driven config and editor buttons
 - Compact `NetworkWriter` / `NetworkReader` using varint encoding
 - Per-packet reliability control, so state sync goes reliable and movement/voice goes unreliable
 
@@ -26,7 +29,7 @@ git submodule add https://github.com/Bill3621/Reflect.git Plugins/Reflect
 
 ## Usage
 
-Add `NetworkManager` as a Script in your scene. Set the address, port, max connections, and assign network-spawned prefabs to `SpawnablePrefabs`.
+`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Add a `NetworkManagerUI` script to a scene actor to configure address, port, max connections, and spawnable prefabs from the inspector. `NetworkManagerUI` also provides editor buttons for starting the server, client, or host.
 
 To network an object, put `NetworkIdentity` on the prefab root and subclass `NetworkScript`:
 
@@ -71,14 +74,16 @@ Start the server or client from command line args (`server` / `client`) or use t
 │  ┌─────────────┐  ┌────────────────────┐    │
 │  │  Session     │  │    Components      │    │
 │  │  Manager     │  │  NetworkTransform  │    │
-│  │  Server      │  └────────────────────┘    │
-│  │  Client      │                            │
-│  │  Identity    │  ┌────────────────────┐    │
-│  │  Script      │  │      Transport      │    │
-│  │  RpcRegistry │  │  ITransport (iface) │    │
-│  └──────┬───────┘  │  FlaxTransport      │    │
-│         │          │  LoopbackTransport  │    │
-│  ┌──────┴───────┐  └────────────────────┘    │
+│  │  ManagerUI   │  └────────────────────┘    │
+│  │  Server      │                            │
+│  │  Client      │  ┌────────────────────┐    │
+│  │  Identity    │  │      Transport      │    │
+│  │  Script      │  │  ITransport (iface) │    │
+│  │  RpcRegistry │  │  FlaxTransport      │    │
+│  │  NetworkRef  │  │  LoopbackTransport  │    │
+│  │  InterestMgmt│  └────────────────────┘    │
+│  └──────┬───────┘                            │
+│  ┌──────┴───────┐                            │
 │  │    Core       │                           │
 │  │  Writer/Reader│                           │
 │  │  Serializer   │                           │

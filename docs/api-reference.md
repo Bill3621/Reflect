@@ -6,7 +6,9 @@ This is a quick map of the public types in the `Reflect` namespace and what they
 
 ### NetworkManager
 
-A Flax `Script` that owns the transport, server, and client. Add it to a scene actor. Holds a static `Instance`. `StartHost()` runs both server and client in one process for local play.
+A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. `StartHost()` runs both server and client in one process for local play.
+
+Configuration (address, port, prefabs, etc.) is pushed in by `NetworkManagerUI`. The plugin itself initializes during `Initialize()` and ticks via `Scripting.Update`.
 
 - `static NetworkManager Instance`
 - `Prefab[] SpawnablePrefabs`
@@ -17,14 +19,31 @@ A Flax `Script` that owns the transport, server, and client. Add it to a scene a
 - `event Action OnServerStarted`
 - `static bool IsServer`, `static bool IsClient`, `static bool IsHost`
 - `NetworkServer Server`, `NetworkClient Client`
-- `void StartServer()`, `void StartClient()`, `void StartHost()`
+- `void StartServer()`, `void StartClient()`, `void StartHost()` (deprecated)
+- `void RebuildPrefabRegistry()`, `void RebuildTransport()`
+- `void OnStart()` (reads command-line args for `server` / `client`)
+
+### NetworkManagerUI
+
+A Flax `Script` you place on a scene actor. It exposes the network settings in the inspector and provides editor buttons for starting and stopping the server, client, and host. After a short delay (0.25s) it pushes its settings into `NetworkManager` and calls `OnStart()`.
+
+- `Prefab[] SpawnablePrefabs`
+- `float SyncInterval` (default 0.1)
+- `string Address` (default `127.0.0.1`)
+- `ushort Port` (default 7777)
+- `ushort MaxConnections` (default 16)
+- `[ShowInEditor] bool Initialized`, `bool IsHost`, `bool IsServer`, `bool IsClient`
+- `[Button] void StartHost()` (deprecated), `void StartServer()`, `void StartClient()`
+- `[Button] void StopServer()`, `void StopClient()`
 
 ### NetworkServer
 
-Created by `NetworkManager` with a transport and a prefab registry. Manages spawned objects and connections on the server.
+Created by `NetworkManager` with a transport and a prefab registry. Manages spawned objects, connections, and observer visibility on the server.
 
 - `Dictionary<uint, NetworkIdentity> Spawned`
 - `Dictionary<int, NetworkConnection> Connections`
+- `IInterestManagement Interest` (default `GlobalInterest`)
+- `float RebuildInterval` (default 1.0, seconds between observer rebuilds)
 - `bool Active`
 - `event Action<NetworkConnection> OnPlayerConnected`
 - `event Action<NetworkConnection> OnPlayerLoaded`
@@ -34,7 +53,10 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`
 - `void SendToConnection(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType)`
+- `void RebuildObservers()`
 - `void Update()`
+
+Spawning and despawning now go through the interest management system. When an object spawns, the server calls `RebuildObservers()`, which asks the current `IInterestManagement` implementation which objects each connection should see, then sends spawn messages only to connections that newly need to see an object and despawn (hide) messages to connections that should stop seeing it. `Update()` periodically calls `RebuildObservers()` (every `RebuildInterval` seconds) to keep visibility current as objects move.
 
 ### NetworkClient
 
@@ -88,6 +110,29 @@ Static cache that discovers RPC methods by reflection and assigns stable IDs.
 `RpcInfo` fields: `ushort Id`, `MethodInfo Method`, `ParameterInfo[] Params`, `RpcKind Kind`, `bool RequiresAuthority`, `NetworkChannelType ChannelType`.
 
 `RpcKind` enum: `Command`, `ClientRpc`, `TargetRpc`.
+
+## Interest Management
+
+### IInterestManagement
+
+Interface for controlling which networked objects each connection can see. The server calls `Rebuild` with all spawned identities, then calls `GatherVisible` per connection to determine the visible set.
+
+- `void Rebuild(IReadOnlyCollection<NetworkIdentity> all)`
+- `void GatherVisible(NetworkConnection conn, HashSet<uint> result)`
+
+### GlobalInterest
+
+Default implementation. Every connection sees every object. No spatial filtering.
+
+### DistanceInterest
+
+A connection sees objects within a fixed range (5000 units) of its owned player. Objects outside the range are hidden.
+
+### GridInterest
+
+Spatial hash grid with 1000-unit cells and a 2-cell view radius. Uses hysteresis (1 extra cell) so objects at the edge of visibility do not flicker in and out. Objects already being observed stay visible in the hysteresis ring even if they step just outside the tight view radius, until they move far enough to leave the hysteresis zone entirely.
+
+This is what `NetworkManager.StartServer()` assigns by default.
 
 ## Attributes
 
@@ -167,7 +212,7 @@ Constructor: `SyncVar<T>(T initial = default, Action<T, T> hook = null)`. The ho
 
 A synchronized list with operation-level delta tracking. Implements `ISyncVar` and `IReadOnlyList<T>`.
 
-- `T this[int index]` (get + set, set records an op)
+- `T this[int index]` (get + set, set records an op, `[NoSerialize]`)
 - `int Count`
 - `void Add(T)`, `void Insert(int, T)`, `void RemoveAt(int)`, `bool Remove(T)`, `void Clear()`
 - `int IndexOf(T)`, `bool Contains(T)`
@@ -182,7 +227,7 @@ Full serialization writes the entire list. Delta serialization writes the operat
 
 A synchronized dictionary with operation-level delta tracking. Implements `ISyncVar` and `IReadOnlyDictionary<TKey, TValue>`.
 
-- `TValue this[TKey key]` (get + set, set records an op)
+- `TValue this[TKey key]` (get + set, set records an op, `[NoSerialize]`)
 - `void Add(TKey, TValue)`, `bool Remove(TKey)`, `void Clear()`
 - `bool ContainsKey(TKey)`, `bool ContainsValue(TValue)`, `bool TryGetValue(TKey, out TValue)`
 - `int Count`

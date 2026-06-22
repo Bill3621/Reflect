@@ -13,14 +13,16 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 │  ┌─────────────┐  ┌────────────────────┐    │
 │  │  Session     │  │    Components      │    │
 │  │  Manager     │  │  NetworkTransform  │    │
-│  │  Server      │  └────────────────────┘    │
-│  │  Client      │                            │
-│  │  Identity    │  ┌────────────────────┐    │
-│  │  Script      │  │      Transport      │    │
-│  │  RpcRegistry │  │  ITransport (iface) │    │
-│  │  NetworkRef  │  │  FlaxTransport      │    │
-│  └──────┬───────┘  │  LoopbackTransport  │    │
-│  ┌──────┴───────┐  └────────────────────┘    │
+│  │  ManagerUI   │  └────────────────────┘    │
+│  │  Server      │                            │
+│  │  Client      │  ┌────────────────────┐    │
+│  │  Identity    │  │      Transport      │    │
+│  │  Script      │  │  ITransport (iface) │    │
+│  │  RpcRegistry │  │  FlaxTransport      │    │
+│  │  NetworkRef  │  │  LoopbackTransport  │    │
+│  │  InterestMgmt│  └────────────────────┘    │
+│  └──────┬───────┘                            │
+│  ┌──────┴───────┐                            │
 │  │    Core       │                           │
 │  │  Writer/Reader│                           │
 │  │  Serializer   │                           │
@@ -33,7 +35,7 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 
 Your game scripts are plain `NetworkScript` subclasses. They declare `SyncVar<T>` fields and methods marked with RPC attributes. Reflect never asks you to touch sockets or frames. Everything below your scripts is the plugin.
 
-The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`, `NetworkRef`) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
+The Session layer (`NetworkManager`, `NetworkManagerUI`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`, `NetworkRef`, interest management) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
 
 ## The transport abstraction
 
@@ -65,11 +67,27 @@ When a client connects, two things happen in sequence, and they fire different e
 
 `OnPlayerConnected` fires immediately. The connection is registered and its `NetworkConnection` object is in the `Connections` dictionary. But the client does not yet know about any spawned objects. The server queues the connection as pending.
 
-On the next `Update` tick, the server drains the pending queue. For each pending connection, it sends a `Spawn` message for every existing object in the world, then sends `WelcomeDone`. After that, `OnPlayerLoaded` fires.
+On the next `Update` tick, if there are pending connections, `RebuildObservers()` runs first. It asks the interest management system which objects the new connection should see and sends spawn messages for those. Then the server drains the pending queue and sends `WelcomeDone` to each connection. After that, `OnPlayerLoaded` fires.
 
-This split exists because spawning the entire world into a new client takes a full update tick. If `OnPlayerConnected` fired after the world was sent, gameplay code waiting for "player joined" would race against the spawn messages arriving on the client. The two-event model lets you react to the raw connection immediately (`OnPlayerConnected`) and to the ready-to-play state when the client has the full world (`OnPlayerLoaded`).
+This split exists because spawning the relevant world into a new client takes a full update tick. If `OnPlayerConnected` fired after the world was sent, gameplay code waiting for "player joined" would race against the spawn messages arriving on the client. The two-event model lets you react to the raw connection immediately (`OnPlayerConnected`) and to the ready-to-play state when the client has the world (`OnPlayerLoaded`).
 
 Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
+
+## Interest management
+
+Not every client needs to know about every object. In a large world, sending spawn, despawn, and state-sync data for objects a player cannot see wastes bandwidth and CPU. Interest management lets the server filter which objects each connection observes.
+
+The `IInterestManagement` interface has two methods. `Rebuild` receives the full set of spawned identities and builds whatever acceleration structures the implementation needs (a spatial hash, a position cache, etc.). `GatherVisible` takes a connection and fills a result set with the net IDs that connection should currently see.
+
+Reflect ships three implementations:
+
+- `GlobalInterest` is the default fallback. Every connection sees every object. No spatial filtering at all. Fine for small games or testing.
+- `DistanceInterest` checks whether each object is within a fixed range (5000 units) of the connection's owned player.
+- `GridInterest` bins objects into a spatial hash grid (1000-unit cells, 2-cell view radius). It adds a 1-cell hysteresis ring so objects at the visibility edge do not flicker. Objects already being observed stay visible until they leave the hysteresis zone, which prevents rapid spawn/despawn cycling.
+
+`NetworkManager.StartServer()` wires `GridInterest` by default. You can swap in a different implementation by setting `Server.Interest` after the server starts.
+
+The server rebuilds observers on three triggers: when an object spawns or despawns (calls `RebuildObservers()` directly), when a new connection is pending (triggered at the top of `Update()`), and on a timer (`RebuildInterval`, default 1 second) to keep visibility current as objects move around the world.
 
 ## Host mode
 

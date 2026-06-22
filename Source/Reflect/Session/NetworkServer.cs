@@ -284,7 +284,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
                 _toAdd.Add(netId);
             
             _toRemove.Clear();
-            foreach(var netId in conn.Observing.Where(netId => !conn.Observing.Contains(netId)))
+            foreach(var netId in conn.Observing.Where(netId => !_desired.Contains(netId)))
                 _toRemove.Add(netId);
             
             foreach(var netId in _toAdd)
