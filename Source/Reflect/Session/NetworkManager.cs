@@ -42,8 +42,10 @@ public class NetworkManager : GamePlugin
     }
 
     private bool _hasStarted;
-    private void OnStart()
+    public void OnStart()
     {
+        if (_hasStarted) return;
+        _hasStarted = true;
         var args = Engine.CommandLine;
         if (args.Contains("server"))
         {
@@ -99,12 +101,6 @@ public class NetworkManager : GamePlugin
 
     private void OnUpdate()
     {
-        if (!_hasStarted)
-        {
-            _hasStarted = true;
-            OnStart();
-        } 
-        
         _transport?.Poll();
 
         if (!IsServer) return;

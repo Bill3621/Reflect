@@ -94,6 +94,12 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
                 return;
             }
 
+            if (Spawned.ContainsKey(netId))
+            {
+                Debug.LogWarning($"Tried spawning prefab (netId={netId}), but it was already spawned!");
+                return;
+            }
+
             var actor = PrefabManager.SpawnPrefab(prefab, new Vector3(pos.X, pos.Y, pos.Z), rot);
             ni = actor.GetScript<NetworkIdentity>();
         }

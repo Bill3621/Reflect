@@ -9,7 +9,6 @@ namespace Reflect;
 
 public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab> prefabs)
 {
-    private readonly Dictionary<Guid, Prefab> _prefabs = prefabs;
     private readonly NetworkWriter _w = new();
     private readonly NetworkReader _r = new();
     
@@ -146,7 +145,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)
     {
-        if (!_prefabs.ContainsValue(prefab))
+        if (!prefabs.ContainsValue(prefab))
         {
             Debug.LogError("Prefab is not registered as a spawnable Prefab.");
             return null;

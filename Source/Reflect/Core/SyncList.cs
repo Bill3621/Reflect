@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using FlaxEngine;
 
 namespace Reflect;
 
@@ -54,6 +55,7 @@ public sealed class SyncList<T> : ISyncVar, IReadOnlyList<T>
         _ops.Add((Op.Clear, 0, default));
     }
 
+    [NoSerialize]
     public T this[int index]
     {
         get => _items[index];

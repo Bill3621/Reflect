@@ -20,12 +20,25 @@ public class NetworkManagerUI : Script
     [ShowInEditor] public bool IsServer => NetworkManager.IsServer;
     [ShowInEditor] public bool IsClient => NetworkManager.IsClient;
 
-    public override void OnAwake() => RebuildNetworkManager();
-    
+    private float _startTimer;
+    private const float TimeBeforeStart = 0.25f;
+    public override void OnUpdate()
+    {
+        if (_startTimer >= TimeBeforeStart) return;
+        _startTimer += Time.DeltaTime;
+        if (_startTimer < TimeBeforeStart) return;
+        RebuildNetworkManager();
+        NetworkManager.Instance.OnStart();
+    }
+
 
     private void RebuildNetworkManager()
     {
-        if (NetworkManager.Instance == null) return;
+        if (NetworkManager.Instance == null)
+        {
+            Debug.LogWarning("NetworkManager.Instance is null.");
+            return;
+        }
         NetworkManager.Instance.SpawnablePrefabs = SpawnablePrefabs;
         NetworkManager.Instance.SyncInterval = SyncInterval;
         NetworkManager.Instance.Address = Address;

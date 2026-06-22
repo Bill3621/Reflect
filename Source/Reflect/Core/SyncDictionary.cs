@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using FlaxEngine;
 
 namespace Reflect;
 
@@ -21,6 +22,7 @@ public sealed class SyncDictionary<TKey, TValue> : ISyncVar, IReadOnlyDictionary
     public bool IsDirty => _ops.Count > 0;
     public void ClearDirty() => _ops.Clear();
 
+    [NoSerialize]
     public TValue this[TKey key]
     {
         get => _items[key];
