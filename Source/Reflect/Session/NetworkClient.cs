@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using FlaxEngine;
 using FlaxEngine.Networking;
@@ -9,6 +10,7 @@ namespace Reflect;
 
 public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab> prefabs)
 {
+    private readonly NetworkReader _packetReader = new();
     private readonly NetworkReader _r = new();
 
     private readonly Dictionary<uint, NetworkIdentity> _spawned = [];
@@ -50,24 +52,27 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     
     private void OnData(ArraySegment<byte> data)
     {
-        _r.SetBuffer(data);
-        while (_r.HasMore)
+        _packetReader.SetBuffer(data);
+        try
         {
-            var type = Msg.ReadHeader(_r);
-            var msgLen = _r.ReadLength();
-            var msgEnd = _r.Position + msgLen;
-            switch (type)
+            while (_packetReader.HasMore)
             {
-                case MsgType.Spawn: HandleSpawn(); break;
-                case MsgType.Despawn: HandleDespawn(); break;
-                case MsgType.State: HandleState(msgEnd); break;
-                case MsgType.WelcomeDone: OnReady?.Invoke(); break;
-                case MsgType.ClientRpc:
-                case MsgType.TargetRpc: HandleRpc(); break;
-                case MsgType.Command:
-                default: _r.SkipRemaining(msgEnd); break;
+                var type = Msg.ReadHeader(_packetReader);
+                _r.SetBuffer(_packetReader.ReadSegment(_packetReader.ReadLength()));
+                switch (type)
+                {
+                    case MsgType.Spawn: HandleSpawn(); break;
+                    case MsgType.Despawn: HandleDespawn(); break;
+                    case MsgType.State: HandleState(); break;
+                    case MsgType.WelcomeDone: OnReady?.Invoke(); break;
+                    case MsgType.ClientRpc:
+                    case MsgType.TargetRpc: HandleRpc(type); break;
+                }
             }
-            _r.SkipRemaining(msgEnd);
+        }
+        catch (InvalidDataException ex)
+        {
+            Debug.LogWarning($"Dropped invalid server packet: {ex.Message}");
         }
     }
 
@@ -81,10 +86,24 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         var pos = _r.Read<Float3>();
         var rot = _r.Read<Quaternion>();
         var isOwner = _r.ReadByte() == 1;
+        var count = _r.ReadByte();
 
-        if (sceneId != 0 && SceneObjects.TryGetValue(sceneId, out var ni))
+        if (Spawned.ContainsKey(netId))
         {
-            ni.Actor.IsActive = true;
+            Debug.LogWarning($"Tried spawning netId={netId}, but it was already spawned!");
+            return;
+        }
+
+        NetworkIdentity ni;
+        if (sceneId != 0)
+        {
+            if (!SceneObjects.TryGetValue(sceneId, out ni))
+            {
+                Debug.LogError($"No scene object registered for {sceneId}");
+                return;
+            }
+            ni.Actor.Position = new Vector3(pos.X, pos.Y, pos.Z);
+            ni.Actor.Orientation = rot;
         }
         else
         {
@@ -94,27 +113,33 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
                 return;
             }
 
-            if (Spawned.ContainsKey(netId))
-            {
-                Debug.LogWarning($"Tried spawning prefab (netId={netId}), but it was already spawned!");
-                return;
-            }
-
             var actor = PrefabManager.SpawnPrefab(prefab, new Vector3(pos.X, pos.Y, pos.Z), rot);
             ni = actor.GetScript<NetworkIdentity>();
         }
 
-        ni.NetId = netId;
-        ni.AssetId = assetId;
-        ni.SceneId = sceneId;
-        ni.IsOwnedLocally = isOwner;
-        Spawned[netId] = ni;
-        
-        var count = _r.ReadByte();
         var scripts = ni.Scripts;
-        for (var i = 0; i < count; i++)
-            scripts[i].Deserialize(_r, true);
+        try
+        {
+            if (count != scripts.Length)
+                throw new InvalidDataException($"Spawn component count {count} does not match {scripts.Length} local components.");
+            ni.NetId = netId;
+            ni.AssetId = assetId;
+            ni.SceneId = sceneId;
+            ni.IsOwnedLocally = isOwner;
+            Spawned[netId] = ni;
+            for (var i = 0; i < count; i++)
+                scripts[i].Deserialize(_r, true);
+            if (_r.HasMore)
+                throw new InvalidDataException("Spawn has trailing state data.");
+        }
+        catch (InvalidDataException)
+        {
+            Spawned.Remove(netId);
+            if (sceneId == 0) Object.Destroy(ni.Actor);
+            throw;
+        }
 
+        if (sceneId != 0) ni.Actor.IsActive = true;
         foreach (var s in scripts) s.OnNetworkSpawn();
     }
 
@@ -125,33 +150,51 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         if (!Spawned.TryGetValue(netId, out var ni)) return;
         foreach (var s in ni.Scripts) s.OnNetworkDespawn();
         Spawned.Remove(netId);
-        Object.Destroy(ni.Actor);
+        if (ni.SceneId != 0)
+            ni.Actor.IsActive = false;
+        else
+            Object.Destroy(ni.Actor);
     }
 
-    private void HandleState(int msgEnd)
+    private void HandleState()
     {
         if (NetworkManager.IsHost) return;
         var netId = _r.ReadUIntVar();
         var compIndex = _r.ReadByte();
-        if (Spawned.TryGetValue(netId, out var ni))
-            ni.Scripts[compIndex].Deserialize(_r, false);
-        else
+        if (!Spawned.TryGetValue(netId, out var ni))
         {
-            _r.SkipRemaining(msgEnd);
             Debug.LogWarning($"State for unknown netId {netId}, skipped");
+            return;
         }
+        var scripts = ni.Scripts;
+        if (compIndex >= scripts.Length)
+            throw new InvalidDataException($"State has invalid component index {compIndex}.");
+        scripts[compIndex].Deserialize(_r, false);
     }
 
-    private void HandleRpc()
+    private void HandleRpc(MsgType type)
     {
         var netId = _r.ReadUIntVar();
         var comp = _r.ReadByte();
-        var rpcId = (ushort)_r.ReadUIntVar();
+        var rpcId = _r.ReadUIntVar();
         var argSeg = _r.ReadBytes();
-        
-        if(Spawned.TryGetValue(netId, out var ni))
-            ni.Scripts[comp] .DispatchRpc(rpcId, argSeg);
-        else
+        if (_r.HasMore)
+            throw new InvalidDataException("RPC has trailing data.");
+
+        if (!Spawned.TryGetValue(netId, out var ni))
+        {
             Debug.LogWarning($"RPC for unknown netId {netId} (skipped)");
+            return;
+        }
+        var scripts = ni.Scripts;
+        if (comp >= scripts.Length)
+            throw new InvalidDataException($"RPC has invalid component index {comp}.");
+        var script = scripts[comp];
+        if (rpcId > ushort.MaxValue || !RpcRegistry.Get(script.GetType()).TryGetValue((ushort)rpcId, out var info))
+            throw new InvalidDataException($"Unknown RPC ID {rpcId}.");
+        var expectedKind = type == MsgType.ClientRpc ? RpcKind.ClientRpc : RpcKind.TargetRpc;
+        if (info.Kind != expectedKind)
+            throw new InvalidDataException($"RPC '{info.Method.Name}' does not match message type {type}.");
+        script.DispatchRpc((ushort)rpcId, argSeg);
     }
 }

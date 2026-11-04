@@ -37,6 +37,8 @@ public class NetworkTransform : NetworkScript
 
    public override void OnNetworkSpawn()
    {
+      _buffer.Clear();
+      _sendAccum = 0;
       _lastSentPos = Actor.Position;
       _lastSendRot = Actor.Orientation;
    }
@@ -107,6 +109,7 @@ public class NetworkTransform : NetworkScript
    [Command(ChannelType = NetworkChannelType.Unreliable)]
    private void CmdMove(Float3 pos, Quaternion rot)
    {
+      if (!ClientAuthority) return;
       if (!IsLocalOwner)
       {
          // TODO: Server validation?

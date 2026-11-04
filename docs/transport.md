@@ -71,7 +71,7 @@ var config = new NetworkConfig
 
 ### Message pool lifecycle
 
-Flax `NetworkPeer` uses a pool of `NetworkMessage` objects. When data arrives, `Poll` pops events off the peer and reads the message payload. After reading, it calls `peer.RecycleMessage(evt.Message)` to return the buffer to the pool.
+Flax `NetworkPeer` uses a pool of `NetworkMessage` objects. When data arrives, `Poll` pops events off the peer and reads the message payload. It returns the buffer with `peer.RecycleMessage(evt.Message)` in a `finally` block, including when a packet is malformed or a message handler throws. Handler errors are logged without stopping the remaining message events.
 
 This matters if you write your own transport or touch the peer directly. Messages are pooled objects, not owned by you. You must recycle them when you are done or the pool runs dry and the peer stops delivering.
 
@@ -83,7 +83,7 @@ This matters if you write your own transport or touch the peer directly. Message
 [ int32 length ][ payload bytes ]
 ```
 
-On send, `WritePayload` checks that the payload fits (`data.Count` must be under `MessageSize - 4`) and throws if it does not. On receive, `ReadPayload` reads the length, allocates a byte array, and copies the bytes out into an `ArraySegment<byte>`.
+On send, `WritePayload` checks that the payload fits (`data.Count` must not exceed `MessageSize - 4`) and throws if it does not. On receive, `ReadPayload` validates the length prefix against both the available message bytes and the configured size limit before allocating a byte array. It rejects negative lengths, truncated messages, and engine read errors.
 
 Because of this prefix, the practical max Reflect payload per send is `MessageSize - 4` bytes (1496 bytes with the default 1500 `MessageSize`). Keep your individual messages under that or raise `MessageSize`.
 

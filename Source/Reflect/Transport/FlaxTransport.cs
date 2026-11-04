@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using FlaxEngine;
 using FlaxEngine.Networking;
 
 namespace Reflect;
@@ -117,12 +119,27 @@ public sealed class FlaxTransport : ITransport
                         OnClientDisconnected?.Invoke();
                     break;
                 case NetworkEventType.Message:
-                    var payload = ReadPayload(ref evt.Message);
-                    if(isServer)
-                        OnServerData?.Invoke((int)evt.Sender.ConnectionId, payload);
-                    else
-                        OnClientData?.Invoke(payload);
-                    peer.RecycleMessage(evt.Message);
+                    try
+                    {
+                        var payload = ReadPayload(ref evt.Message);
+                        if (isServer)
+                            OnServerData?.Invoke((int)evt.Sender.ConnectionId, payload);
+                        else
+                            OnClientData?.Invoke(payload);
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        Debug.LogWarning($"Dropped invalid network message from connection {evt.Sender.ConnectionId}: {ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"Network message handler failed for connection {evt.Sender.ConnectionId}.");
+                        Debug.LogException(ex);
+                    }
+                    finally
+                    {
+                        peer.RecycleMessage(evt.Message);
+                    }
                     break;
             }
         }
@@ -148,12 +165,17 @@ public sealed class FlaxTransport : ITransport
             msg.WriteBytes(data.Array, data.Count);
     }
 
-    private static ArraySegment<byte> ReadPayload(ref NetworkMessage msg)
+    private ArraySegment<byte> ReadPayload(ref NetworkMessage msg)
     {
+        if ((msg.Flags & NetworkMessageFlags.HasError) != 0 || msg.Position > msg.BufferSize || msg.BufferSize - msg.Position < 4)
+            throw new InvalidDataException("Truncated transport length prefix.");
         var len = msg.ReadInt32();
-        if (len <= 0) return default;
+        if (len < 0 || len > MessageSize - 4 || (uint)len > msg.BufferSize - msg.Position)
+            throw new InvalidDataException("Transport payload length exceeds the available message bytes or configured limit.");
         var buf = new byte[len];
         msg.ReadBytes(buf, len);
+        if ((msg.Flags & NetworkMessageFlags.HasError) != 0)
+            throw new InvalidDataException("Failed to read the transport payload.");
         return new ArraySegment<byte>(buf);
     }
 }

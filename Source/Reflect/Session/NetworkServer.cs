@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using FlaxEngine;
 using FlaxEngine.Networking;
@@ -12,6 +13,7 @@ namespace Reflect;
 public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab> prefabs)
 {
     private readonly NetworkWriter _w = new();
+    private readonly NetworkReader _packetReader = new();
     private readonly NetworkReader _r = new();
     
     private readonly Queue<NetworkConnection> _pendingConns = [];
@@ -95,24 +97,24 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     
     private void OnData(int connId, ArraySegment<byte> data)
     {
-        _r.SetBuffer(data);
-        while (_r.HasMore)
+        if (!Connections.ContainsKey(connId)) return;
+        _packetReader.SetBuffer(data);
+        try
         {
-            var type = Msg.ReadHeader(_r);
-            var msgLen = _r.ReadLength();
-            var msgEnd = _r.Position + msgLen;
-            switch (type)
+            while (_packetReader.HasMore)
             {
-                case MsgType.Command: HandleCommand(connId); break;
-                case MsgType.Spawn:
-                case MsgType.Despawn:
-                case MsgType.State:
-                case MsgType.WelcomeDone:
-                case MsgType.ClientRpc:
-                case MsgType.TargetRpc:
-                default: Debug.LogWarning($"Server got unexpected msg {type}"); _r.SkipRemaining(msgEnd); break;
+                var type = Msg.ReadHeader(_packetReader);
+                _r.SetBuffer(_packetReader.ReadSegment(_packetReader.ReadLength()));
+                switch (type)
+                {
+                    case MsgType.Command: HandleCommand(connId); break;
+                    default: Debug.LogWarning($"Server got unexpected msg {type}"); break;
+                }
             }
-            _r.SkipRemaining(msgEnd);
+        }
+        catch (InvalidDataException ex)
+        {
+            Debug.LogWarning($"Dropped invalid packet from conn {connId}: {ex.Message}");
         }
     }
     
@@ -120,8 +122,10 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     {
         var netId = _r.ReadUIntVar();
         var comp = _r.ReadByte();
-        var rpcId = (ushort)_r.ReadUIntVar();
+        var rpcId = _r.ReadUIntVar();
         var argSeg = _r.ReadBytes();
+        if (_r.HasMore)
+            throw new InvalidDataException("Command has trailing data.");
 
         if (!Spawned.TryGetValue(netId, out var ni))
         {
@@ -129,9 +133,18 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             return;
         }
 
-        var script = ni.Scripts[comp];
-        var info = RpcRegistry.Get(script.GetType())[rpcId];
-        
+        var scripts = ni.Scripts;
+        if (comp >= scripts.Length)
+            throw new InvalidDataException($"Command has invalid component index {comp}.");
+        var script = scripts[comp];
+        if (rpcId > ushort.MaxValue || !RpcRegistry.Get(script.GetType()).TryGetValue((ushort)rpcId, out var info))
+            throw new InvalidDataException($"Command has unknown RPC ID {rpcId}.");
+        if (info.Kind != RpcKind.Command)
+        {
+            Debug.LogWarning($"Conn {connId} tried invoking non-Command RPC '{info.Method.Name}'.");
+            return;
+        }
+
         if (info.RequiresAuthority)
         {
             Connections.TryGetValue(connId, out var conn);
@@ -142,7 +155,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             }
         }
 
-        script.DispatchRpc(rpcId, argSeg);
+        script.DispatchRpc((ushort)rpcId, argSeg);
     }
 
     /// <summary>
@@ -197,6 +210,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     private void SendSpawn(NetworkConnection conn, NetworkIdentity ni)
     {
+        // Existing observers need pending operations before the new observer's snapshot.
+        SendState(ni);
         _w.Reset();
         _w.BeginMessage(MsgType.Spawn);
         _w.WriteUIntVar(ni.NetId);
@@ -230,25 +245,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         }
         
         foreach (var ni in Spawned.Values)
-        {
-            if(!ni.AnyDirty()) continue;
-            
-            foreach (var s in ni.Scripts)
-            {
-                if (!s.AnyDirty()) continue;
-
-                _w.Reset();
-                _w.BeginMessage(MsgType.State);
-                _w.WriteUIntVar(ni.NetId);
-                _w.WriteByte(s.ComponentIndex);
-                s.SerializeDelta(_w);
-                _w.FinishMessage();
-
-                var seg = _w.ToSegment();
-                foreach (var conn in Connections.Values.Where(conn => conn.Observing.Contains(ni.NetId)))
-                    transport.ServerSend(conn.Id, seg);
-            }
-        }
+            SendState(ni);
         
         while (_pendingConns.Count > 0)
         {
@@ -264,6 +261,23 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         }
     }
     
+    private void SendState(NetworkIdentity ni)
+    {
+        foreach (var script in ni.Scripts)
+        {
+            if (!script.AnyDirty()) continue;
+
+            _w.Reset();
+            _w.BeginMessage(MsgType.State);
+            _w.WriteUIntVar(ni.NetId);
+            _w.WriteByte(script.ComponentIndex);
+            script.SerializeDelta(_w);
+            _w.FinishMessage();
+
+            SendToObservers(ni, _w.ToSegment());
+        }
+    }
+
     private readonly List<NetworkIdentity> _allCache = [];
     private readonly HashSet<uint> _desired = [];
     private readonly List<uint> _toAdd = [];

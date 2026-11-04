@@ -49,7 +49,7 @@ See the [Transport Layer](/transport) page for the full interface and configurat
 
 Every piece of data Reflect sends goes through the same pipeline. A sender builds a `NetworkWriter`, writes a header byte and a 2-byte body length, then writes the payload. The finished byte array becomes an `ArraySegment<byte>` passed to `ITransport`. On the receiving side, `Poll` drains the transport, and a `NetworkReader` walks the buffer one message at a time.
 
-The on-wire format for a single message is a `MsgType` byte, a 16-bit little-endian body length, then the body. `NetworkWriter.BeginMessage` and `FinishMessage` handle the length back-patching for you. `NetworkReader.ReadLength` and `SkipRemaining` let the receive loop skip past a message it does not recognize without desyncing.
+The on-wire format for a single message is a `MsgType` byte, a 16-bit little-endian body length, then the body. `NetworkWriter.BeginMessage` and `FinishMessage` handle the length back-patching. Each receive handler gets a reader bounded to that message's body, so it cannot consume bytes from the next message. Invalid lengths, truncated values, and overflowing varints cause the session to log a warning and drop the rest of that packet.
 
 Transport implementations are free to frame the payload however they like. `FlaxTransport` writes a 4-byte length prefix on top (see [Transport Layer](/transport)) because that is what Flax's `NetworkMessage` expects. Reflect's own framing sits inside that payload.
 
@@ -57,7 +57,7 @@ Transport implementations are free to frame the payload however they like. `Flax
 
 RPCs are discovered by reflection and dispatched by integer ID. When a type is first touched, `RpcRegistry.Build` scans its methods for `[Command]`, `[ClientRpc]`, and `[TargetRpc]` attributes, sorts them by name with an ordinal comparer, and assigns each one an incrementing `ushort` ID starting at zero.
 
-At runtime, `SendCommand` (or `SendClientRpc` / `SendTargetRpc`) looks up the method by name, writes the object's `NetId`, the `ComponentIndex`, the RPC ID, and the serialized arguments, then hands the buffer to the transport. The receiver reads those same fields, finds the `NetworkIdentity` by `NetId`, indexes into its `Scripts` array with `ComponentIndex`, and calls `DispatchRpc` which invokes the method via reflection.
+At runtime, `SendCommand` (or `SendClientRpc` / `SendTargetRpc`) looks up the method by name, writes the object's `NetId`, the `ComponentIndex`, the RPC ID, and the serialized arguments, then hands the buffer to the transport. The receiver validates the component index, RPC ID, message direction, and argument payload before invoking the method via reflection. The server accepts only `[Command]` methods from clients and checks ownership when `RequiresAuthority` is true.
 
 The ordinal sort is what keeps IDs stable. As long as method names do not collide across your inheritance chain, the ID for a given method name is the same on every machine. Renaming a method changes its sort position and therefore its ID, which breaks compatibility with older builds.
 
@@ -87,6 +87,8 @@ Reflect ships three implementations:
 
 `NetworkManager.StartServer()` wires `GridInterest` by default. You can swap in a different implementation by setting `Server.Interest` after the server starts.
 
+Clients destroy prefab actors when hidden, but deactivate scene actors and keep their scene registrations. When a scene actor becomes visible again, the client applies the spawn transform and full state to the same actor. `NetworkTransform` clears its old interpolation snapshots on each network spawn.
+
 The server rebuilds observers on three triggers: when an object spawns or despawns (calls `RebuildObservers()` directly), when a new connection is pending (triggered at the top of `Update()`), and on a timer (`RebuildInterval`, default 1 second) to keep visibility current as objects move around the world.
 
 ## Host mode
@@ -108,6 +110,8 @@ Ownership in host mode is set directly. When the server calls `SendSpawn` for th
 Delta serialization is a 64-bit mask. Reflect collects the dirty SyncVars on a script, sets the corresponding bits in a `ulong`, and writes the mask followed by only the dirty values. After writing, each dirty SyncVar clears its flag. Full serialization (used on spawn) writes the mask with all bits set for that script's SyncVar count, then every value. Because the mask is 64 bits wide, a single `NetworkScript` supports at most 64 SyncVars.
 
 `SyncList<T>` and `SyncDictionary<TKey, TValue>` use the same dirty-mask slot as a regular `SyncVar<T>`, but their delta format is an operation log rather than a single value. The list tracks add, insert, set, removeAt, and clear. The dictionary tracks set, remove, and clear. Both clear their operation log after each delta serialization.
+
+Before sending a full spawn snapshot to a new observer, the server flushes pending deltas to existing observers. This prevents the new observer from replaying collection operations already included in its snapshot. This flush can happen between regular sync ticks.
 
 See [SyncVars](/syncvars) for the API, change hooks, and collection types.
 

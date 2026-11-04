@@ -46,7 +46,7 @@ private static void OnHealthChanged(int old, int current)
 
 Writing to `Value` only marks the SyncVar dirty when the new value differs from the old one. The comparison uses `EqualityComparer<T>.Default`, so value types compare by value and reference types (like `string`) compare by their default equality.
 
-The server calls `Server.Update()` every `SyncInterval` seconds (default 0.1). That tick walks every spawned object, finds scripts where `AnyDirty()` is true, and serializes just the changed SyncVars.
+The server calls `Server.Update()` every `SyncInterval` seconds (default 0.1). That tick walks every spawned object, finds scripts where `AnyDirty()` is true, and serializes just the changed SyncVars. Before sending an object's full snapshot to a new observer, the server also flushes its pending deltas to existing observers. New observers receive the current collection contents without replaying operations already included in the snapshot.
 
 Once a SyncVar is serialized into a delta, its dirty flag clears. If you write the same value again next tick, it serializes again. There is no aggregation window beyond the sync interval.
 

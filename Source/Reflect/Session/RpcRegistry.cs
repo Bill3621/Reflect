@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using FlaxEngine;
@@ -105,6 +106,8 @@ public static class RpcArgs
         var args = new object[info.Params.Length];
         for (var i = 0; i < info.Params.Length; i++)
             args[i] = Serializers.ReadBoxed(r, info.Params[i].ParameterType);
+        if (r.HasMore)
+            throw new InvalidDataException($"RPC '{info.Method.Name}' has trailing argument data.");
         return args;
     }
 }
