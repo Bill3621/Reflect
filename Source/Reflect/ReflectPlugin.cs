@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using FlaxEngine;
 
 namespace Reflect;
@@ -8,6 +9,8 @@ namespace Reflect;
 /// </summary>
 public class ReflectPlugin : GamePlugin
 {
+    private bool _forwardLogs;
+    
     public ReflectPlugin()
     {
         _description = new PluginDescription
@@ -29,10 +32,31 @@ public class ReflectPlugin : GamePlugin
     {
         base.Initialize();
         Debug.Log("[Reflect] Networking plugin initialized.");
+
+        if (!Engine.IsHeadless || !Engine.CommandLine.Contains("server")) return;
+        
+        Debug.Logger.LogHandler.SendLog += ForwardLog;
+        Debug.Logger.LogHandler.SendExceptionLog += ForwardException;
+        _forwardLogs = true;
     }
 
     public override void Deinitialize()
     {
         base.Deinitialize();
+
+        if (!_forwardLogs) return;
+        Debug.Logger.LogHandler.SendLog -= ForwardLog;
+        Debug.Logger.LogHandler.SendExceptionLog -= ForwardException;
+        _forwardLogs = false;
     }
+
+    private static void ForwardLog(LogType type, string message, FlaxEngine.Object context, string stackTrace) => SendLog(type, message);
+    private static void ForwardException(Exception exception, FlaxEngine.Object context) => SendLog(LogType.Error, exception.ToString());
+
+    private static void SendLog(LogType type, string message)
+    {
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(message));
+        Console.WriteLine($"REFLECT_LOG:{(int)type}:{encoded}");
+        Console.Out.Flush();
+    } 
 }

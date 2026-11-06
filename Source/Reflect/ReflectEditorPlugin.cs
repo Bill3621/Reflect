@@ -1,7 +1,9 @@
 #if FLAX_EDITOR
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using FlaxEditor;
 using FlaxEditor.GUI;
 using FlaxEngine;
@@ -18,6 +20,9 @@ public class ReflectEditorPlugin : EditorPlugin
     private ToolStripSeparator _separator;
     private ToolStripButton _serverButton;
     private Process _serverProcess;
+    private readonly Queue<(LogType Type, string Message)> _serverLogs = new();
+    private volatile bool _serverReady;
+    private bool _autoStartedClient;
 
     private bool IsServerRunning => _serverProcess is { HasExited: false };
 
@@ -69,6 +74,59 @@ public class ReflectEditorPlugin : EditorPlugin
 
     private void OnUpdate()
     {
+        for (var i = 0; i < 100; i++)
+        {
+            (LogType Type, string Message) entry;
+
+            lock (_serverLogs)
+            {
+                if (_serverLogs.Count == 0)
+                    break;
+
+                entry = _serverLogs.Dequeue();
+            }
+
+            var message = $"[Server] {entry.Message}";
+
+            switch (entry.Type)
+            {
+                case LogType.Warning:
+                    Debug.LogWarning(message);
+                    break;
+
+                case LogType.Error:
+                case LogType.Fatal:
+                    Debug.LogError(message);
+                    break;
+
+                case LogType.Info:
+                default:
+                    Debug.Log(message);
+                    break;
+            }
+        }
+
+        if (_serverReady)
+        {
+            if (NetworkManager.IsClient)
+            {
+                _serverReady = false;
+            }
+            else if (NetworkManager.Instance != null)
+            {
+                foreach (var ui in Level.GetScripts<NetworkManagerUI>())
+                {
+                    _serverReady = false;
+
+                    ui.StartClient();
+                    _autoStartedClient = NetworkManager.IsClient;
+
+                    Debug.Log("[Reflect] Auto-started client.");
+                    break;
+                }
+            }
+        }
+        
         if (_serverProcess is not { HasExited: true }) return;
         
         Debug.LogWarning($"Server exited with code {_serverProcess.ExitCode}.");
@@ -134,7 +192,9 @@ public class ReflectEditorPlugin : EditorPlugin
                 FileName = executable,
                 WorkingDirectory = Path.GetDirectoryName(executable)!,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
             };
 
             settings.ArgumentList.Add($"-project={project}");
@@ -156,6 +216,10 @@ public class ReflectEditorPlugin : EditorPlugin
                 return;
             }
 
+            _serverProcess.OutputDataReceived += OnServerOutput;
+            _serverProcess.BeginOutputReadLine();
+            _serverProcess.ErrorDataReceived += OnServerErrorOutput;
+            _serverProcess.BeginErrorReadLine();
             Debug.Log($"Started server process (PID {_serverProcess.Id})");
         }
         catch (Exception ex)
@@ -170,9 +234,17 @@ public class ReflectEditorPlugin : EditorPlugin
 
     private void StopServer()
     {
+
+        _serverReady = false;
+        if (_autoStartedClient)
+        {
+            NetworkManager.Instance?.Client?.Disconnect();
+            _autoStartedClient = false;
+        }
+        
         if (_serverProcess == null)
             return;
-
+        
         try
         {
             if (!_serverProcess.HasExited)
@@ -192,6 +264,47 @@ public class ReflectEditorPlugin : EditorPlugin
         }
 
         UpdateButton();
+    }
+    
+    private void OnServerErrorOutput(object sender, DataReceivedEventArgs e)
+    {
+        if (e.Data?.Trim() != "REFLECT_SERVER_READY")
+            return;
+
+        _serverReady = true;
+
+        lock (_serverLogs)
+        {
+            _serverLogs.Enqueue((
+                LogType.Info,
+                "Server ready signal received."
+            ));
+        }
+    }
+    
+    private void OnServerOutput(object sender, DataReceivedEventArgs e)
+    {
+        const string prefix = "REFLECT_LOG:";
+
+        if (e.Data == null || !e.Data.StartsWith(prefix))
+            return;
+
+        try
+        {
+            var data = e.Data[prefix.Length..];
+            var separator = data.IndexOf(':');
+            if (separator < 0)
+                return;
+
+            var type = int.Parse(data[..separator]);
+            var message = Encoding.UTF8.GetString(Convert.FromBase64String(data[(separator + 1)..]));
+            
+            lock (_serverLogs)
+                _serverLogs.Enqueue(((LogType)type, message));
+        }
+        catch (FormatException)
+        {
+        }
     }
 }
 #endif
