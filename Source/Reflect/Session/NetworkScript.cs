@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using FlaxEngine;
@@ -22,15 +23,19 @@ public abstract class NetworkScript : Script
         {
             if (_syncVars != null) return _syncVars;
             
-            _syncVars = GetType()
-                .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                .Where(f => typeof(ISyncVar).IsAssignableFrom(f.FieldType))
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+            var fields = new List<FieldInfo>();
+            for (var type = GetType(); type != null && type != typeof(NetworkScript); type = type.BaseType)
+                fields.AddRange(type.GetFields(flags).Where(f => typeof(ISyncVar).IsAssignableFrom(f.FieldType)));
+
+            if (fields.Count > 64)
+                throw new InvalidOperationException($"{GetType().Name} has {fields.Count} SyncVars; at most 64 are supported per script.");
+
+            _syncVars = fields
                 .OrderBy(f => f.Name, StringComparer.Ordinal)
+                .ThenBy(f => f.DeclaringType.FullName, StringComparer.Ordinal)
                 .Select(f => (ISyncVar)f.GetValue(this))
                 .ToArray();
-                
-            if(_syncVars.Length > 64)
-                Debug.LogError($"{GetType().Name} has >64 SyncVars; mask is 64-bit.");
 
             return _syncVars;
         }

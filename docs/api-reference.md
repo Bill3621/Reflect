@@ -69,7 +69,7 @@ Created by `NetworkManager`. Manages spawned objects and incoming messages on th
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
 
-In host mode, spawn, despawn, and state messages are skipped because the server already created and owns the objects. RPCs still flow through normally.
+In host mode, spawn messages update local ownership without creating duplicate actors. Despawn and state messages do not modify the shared server objects. RPCs still flow through normally.
 
 ### NetworkIdentity
 

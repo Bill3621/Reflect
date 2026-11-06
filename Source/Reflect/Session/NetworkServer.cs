@@ -17,6 +17,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private readonly NetworkReader _r = new();
     
     private readonly Queue<NetworkConnection> _pendingConns = [];
+    private readonly List<SceneObjectState> _sceneStates = [];
 
     public readonly Dictionary<uint, NetworkIdentity> Spawned = [];
     public readonly Dictionary<int, NetworkConnection> Connections = [];
@@ -36,18 +37,29 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     public void Start()
     {
+        if (Active) return;
+        Active = true;
         transport.OnServerConnected += OnConnected;
         transport.OnServerData += OnData;
         transport.OnServerDisconnected += OnDisconnected;
-        transport.ServerStart();
-        Active = true;
-        RegisterSceneObjects();
+        try
+        {
+            transport.ServerStart();
+            RegisterSceneObjects();
+            _rebuildTimer.Restart();
+        }
+        catch
+        {
+            Stop();
+            throw;
+        }
     }
 
     private void RegisterSceneObjects()
     {
         foreach (var ni in Level.GetScripts<NetworkIdentity>().Where(x => x.SceneId != 0))
         {
+            _sceneStates.Add(new SceneObjectState(ni));
             ni.NetId = _nextNetId++;
             Spawned[ni.NetId] = ni;
             foreach (var s in ni.Scripts) s.OnNetworkSpawn();
@@ -56,11 +68,43 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     public void Stop()
     {
-        transport.ServerStop();
+        if (!Active) return;
+        var hostClient = NetworkManager.IsHost && NetworkManager.Instance.Server == this ? NetworkManager.Instance.Client : null;
+        Active = false;
         transport.OnServerConnected -= OnConnected;
         transport.OnServerData -= OnData;
         transport.OnServerDisconnected -= OnDisconnected;
-        Active = false;
+        try
+        {
+            hostClient?.Disconnect();
+        }
+        finally
+        {
+            try { transport.ServerStop(); }
+            finally { ClearSession(); }
+        }
+    }
+
+    private void ClearSession()
+    {
+        foreach (var connection in Connections.Values)
+        {
+            connection.Observing.Clear();
+            connection.OwnedPlayer = null;
+        }
+        Connections.Clear();
+        _pendingConns.Clear();
+        foreach (var identity in Spawned.Values.ToArray()) Despawn(identity);
+        foreach (var state in _sceneStates) state.Restore();
+        _sceneStates.Clear();
+        Interest.Rebuild(Array.Empty<NetworkIdentity>());
+        _allCache.Clear();
+        _desired.Clear();
+        _toAdd.Clear();
+        _toRemove.Clear();
+        _rebuildTimer.Reset();
+        _packetReader.SetBuffer(default);
+        _r.SetBuffer(default);
     }
 
     private void OnConnected(int connId)
@@ -76,10 +120,10 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private void OnDisconnected(int connId)
     {
         Debug.Log($"Client disconnected with connId={connId}");
-        if (Connections.TryGetValue(connId, out var conn) && conn.OwnedPlayer != null)
-            Despawn(conn.OwnedPlayer);
-        Connections.Remove(connId);
-        
+        if (!Connections.Remove(connId, out var conn)) return;
+        if (conn.OwnedPlayer != null) Despawn(conn.OwnedPlayer);
+        conn.Observing.Clear();
+        conn.OwnedPlayer = null;
         OnPlayerDisconnected?.Invoke(conn);
     }
 
@@ -163,6 +207,11 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)
     {
+        if (!Active)
+        {
+            Debug.LogError("Spawn requires an active server.");
+            return null;
+        }
         if (!prefabs.ContainsValue(prefab))
         {
             Debug.LogError("Prefab is not registered as a spawnable Prefab.");
@@ -191,7 +240,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     public void Despawn(NetworkIdentity ni)
     {
-        if (ni == null || !Spawned.ContainsKey(ni.NetId)) return;
+        if (ni == null || !Spawned.Remove(ni.NetId)) return;
         
         _w.Reset();
         _w.BeginMessage(MsgType.Despawn);
@@ -200,8 +249,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         foreach (var conn in Connections.Values.Where(conn => conn.Observing.Remove(ni.NetId)))
             transport.ServerSend(conn.Id, _w.ToSegment());
         
-        foreach(var s in ni.Scripts) s.OnNetworkDespawn();
-        Spawned.Remove(ni.NetId);
+        ni.NotifyDespawn();
+        ni.ResetNetworkState();
         if (ni.SceneId != 0)
             ni.Actor.IsActive = false;
         else
@@ -221,7 +270,6 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.Write(new Float3(p.X, p.Y, p.Z));
         _w.Write(ni.Actor.Orientation);
         _w.WriteByte((byte)(conn == ni.Owner ? 1 : 0));
-        if (NetworkManager.IsHost) ni.IsOwnedLocally = conn == ni.Owner;
 
         var scripts = ni.Scripts;
         _w.WriteByte((byte)scripts.Length);
@@ -238,6 +286,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public void Update()
     {
+        if (!Active) return;
         if (_pendingConns.Count > 0 || _rebuildTimer.ElapsedMilliseconds >= RebuildInterval * 1000)
         {
             RebuildObservers();
@@ -250,7 +299,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         while (_pendingConns.Count > 0)
         {
             var conn = _pendingConns.Dequeue();
-            if (!Connections.ContainsKey(conn.Id))
+            if (!Connections.TryGetValue(conn.Id, out var current) || !ReferenceEquals(current, conn))
                 continue;
             _w.Reset();
             _w.BeginMessage(MsgType.WelcomeDone);
@@ -284,6 +333,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private readonly List<uint> _toRemove = [];
     public void RebuildObservers()
     {
+        if (!Active) return;
         _allCache.Clear();
         _allCache.AddRange(Spawned.Values);
         Interest.Rebuild(_allCache);

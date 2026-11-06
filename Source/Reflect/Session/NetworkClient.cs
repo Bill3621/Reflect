@@ -14,8 +14,9 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     private readonly NetworkReader _r = new();
 
     private readonly Dictionary<uint, NetworkIdentity> _spawned = [];
-    public Dictionary<uint, NetworkIdentity> Spawned =>
-        NetworkManager.IsHost ? NetworkManager.Instance.Server.Spawned : _spawned;
+    private readonly List<SceneObjectState> _sceneStates = [];
+    private NetworkServer _hostServer;
+    public Dictionary<uint, NetworkIdentity> Spawned => _hostServer?.Spawned ?? _spawned;
     public readonly Dictionary<ulong, NetworkIdentity> SceneObjects = [];
     
     public bool Active { get; private set; }
@@ -23,19 +24,52 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     public void Connect()
     {
+        if (Active) return;
+        Active = true;
+        _hostServer = NetworkManager.IsServer ? NetworkManager.Instance.Server : null;
         transport.OnClientData += OnData;
         transport.OnClientDisconnected += OnDisconnected;
-        transport.ClientConnect();
-        Active = true;
-        RegisterSceneObjects();
+        try
+        {
+            if (_hostServer == null) RegisterSceneObjects();
+            transport.ClientConnect();
+        }
+        catch
+        {
+            Disconnect();
+            throw;
+        }
     }
 
     public void Disconnect()
     {
+        if (!Active) return;
+        Active = false;
         transport.OnClientData -= OnData;
         transport.OnClientDisconnected -= OnDisconnected;
-        transport.ClientDisconnect();
-        Active = false;
+        try
+        {
+            transport.ClientDisconnect();
+        }
+        finally
+        {
+            if (_hostServer != null)
+                foreach (var identity in _hostServer.Spawned.Values)
+                    identity.IsOwnedLocally = false;
+            foreach (var identity in _spawned.Values.ToArray())
+            {
+                identity.NotifyDespawn();
+                identity.ResetNetworkState();
+                if (identity.SceneId == 0) Object.Destroy(identity.Actor);
+            }
+            _spawned.Clear();
+            foreach (var state in _sceneStates) state.Restore();
+            _sceneStates.Clear();
+            SceneObjects.Clear();
+            _hostServer = null;
+            _packetReader.SetBuffer(default);
+            _r.SetBuffer(default);
+        }
     }
 
     private void RegisterSceneObjects()
@@ -43,6 +77,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         foreach (var ni in Level.GetScripts<NetworkIdentity>().Where(x => x.SceneId != 0))
         {
             SceneObjects.Add(ni.SceneId, ni);
+            _sceneStates.Add(new SceneObjectState(ni));
         }
     }
 
@@ -78,8 +113,6 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleSpawn()
     {
-        if (NetworkManager.IsHost) return;
-        
         var netId = _r.ReadUIntVar();
         var assetId = _r.ReadGuid();
         var sceneId = _r.ReadULongVar();
@@ -87,6 +120,13 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         var rot = _r.Read<Quaternion>();
         var isOwner = _r.ReadByte() == 1;
         var count = _r.ReadByte();
+
+        if (_hostServer != null)
+        {
+            if (_hostServer.Spawned.TryGetValue(netId, out var shared))
+                shared.IsOwnedLocally = isOwner;
+            return;
+        }
 
         if (Spawned.ContainsKey(netId))
         {
@@ -145,11 +185,12 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleDespawn()
     {
-        if (NetworkManager.IsHost) return;
+        if (_hostServer != null) return;
         var netId = _r.ReadUIntVar();
         if (!Spawned.TryGetValue(netId, out var ni)) return;
-        foreach (var s in ni.Scripts) s.OnNetworkDespawn();
+        ni.NotifyDespawn();
         Spawned.Remove(netId);
+        ni.ResetNetworkState();
         if (ni.SceneId != 0)
             ni.Actor.IsActive = false;
         else
@@ -158,7 +199,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
 
     private void HandleState()
     {
-        if (NetworkManager.IsHost) return;
+        if (_hostServer != null) return;
         var netId = _r.ReadUIntVar();
         var compIndex = _r.ReadByte();
         if (!Spawned.TryGetValue(netId, out var ni))

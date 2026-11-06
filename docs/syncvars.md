@@ -70,13 +70,13 @@ Hooks fire on clients during normal state sync. They do not fire on the server w
 
 ## The 64 SyncVar limit
 
-The dirty mask is a `ulong`, which is 64 bits. Each SyncVar on a script occupies one bit, indexed by its position in the sorted field list. If a `NetworkScript` declares more than 64 SyncVars, Reflect logs an error at runtime (`has >64 SyncVars; mask is 64-bit`) and the overflow is not serialized.
+The dirty mask is a `ulong`, which is 64 bits. Each SyncVar on a script occupies one bit, indexed by its position in the sorted field list. If a `NetworkScript` has more than 64 SyncVars, including inherited fields, discovering its SyncVars throws `InvalidOperationException` before writing that script's mask or values. Reflect never writes an overflowing mask.
 
 If you need more than 64 synchronized values on one object, split them across multiple `NetworkScript` components on the same actor. Each component gets its own mask and its own slot in the `NetworkIdentity.Scripts` array.
 
 ## Field ordering
 
-Reflect discovers SyncVars by reflecting over the fields of your script type. It orders them by name using `StringComparer.Ordinal` and assigns each one its bit position in that order. Renaming a field shifts its position, which changes which bit it maps to. Keep your SyncVar field names stable across versions for the same reason you keep RPC names stable.
+Reflect discovers SyncVars across the script's inheritance chain, including private fields declared in base scripts. It orders fields by name using `StringComparer.Ordinal`, with the declaring type's full name as a tie-breaker when names match, and assigns bit positions in that order. Renaming a field or adding previously omitted inherited fields changes the wire layout, so clients and servers must use matching script definitions.
 
 ## SyncList
 

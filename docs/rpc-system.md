@@ -126,10 +126,10 @@ private void TargetKillFeed(NetworkRef victim)
 }
 
 // Call it:
-SendTargetRpc(playerConnection, nameof(TargetKillFeed), victimIdentity);
+SendTargetRpc(playerConnection, nameof(TargetKillFeed), (NetworkRef)victimIdentity);
 ```
 
-The implicit conversion from `NetworkIdentity` to `NetworkRef` means you can pass the identity directly and the compiler handles the rest. If the target has not spawned on the receiving peer, `Resolve()` returns `null`.
+Convert a `NetworkIdentity` or `NetworkScript` to `NetworkRef` before passing it to an RPC sender. The send methods take `params object[]`, so passing an identity directly boxes it without applying the implicit conversion. An explicit cast, as above, or a local variable typed as `NetworkRef` avoids that problem. If the target has not spawned on the receiving peer, `Resolve()` returns `null`.
 
 ## How IDs are assigned
 

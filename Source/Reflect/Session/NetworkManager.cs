@@ -58,7 +58,8 @@ public class NetworkManager : GamePlugin
 
     public void RebuildPrefabRegistry()
     {
-        _registry = new Dictionary<Guid, Prefab>();
+        _registry ??= new Dictionary<Guid, Prefab>();
+        _registry.Clear();
         if (SpawnablePrefabs == null) return;
         foreach (var prefab in SpawnablePrefabs)
             if (prefab)
@@ -68,6 +69,7 @@ public class NetworkManager : GamePlugin
     [Button]
     public void RebuildTransport()
     {
+        if (Server is { Active: true } || Client is { Active: true }) return;
         _transport = new FlaxTransport
         {
             Address = Address,
@@ -87,6 +89,8 @@ public class NetworkManager : GamePlugin
     [Button]
     public void StartServer()
     {
+        if (Server is { Active: true }) return;
+        _accum = 0;
         Server = new NetworkServer(_transport, _registry)
         {
             Interest = new GridInterest()
@@ -98,6 +102,7 @@ public class NetworkManager : GamePlugin
     [Button]
     public void StartClient()
     {
+        if (Client is { Active: true }) return;
         Client = new NetworkClient(_transport, _registry);
         Client.Connect();
     }
@@ -119,6 +124,12 @@ public class NetworkManager : GamePlugin
         Scripting.Update -= OnUpdate;
         Client?.Disconnect();
         Server?.Stop();
+        Client = null;
+        Server = null;
+        _transport = null;
+        _registry?.Clear();
+        _accum = 0;
+        _hasStarted = false;
         if (Instance == this) Instance = null;
     }
 }

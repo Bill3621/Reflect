@@ -93,7 +93,7 @@ public sealed class FlaxTransport : ITransport
 
     private void PollPeer(NetworkPeer peer, bool isServer)
     {
-        while (peer.PopEvent(out var evt))
+        while (ReferenceEquals(peer, isServer ? _serverPeer : _clientPeer) && peer.PopEvent(out var evt))
         {
             switch (evt.EventType)
             {
@@ -138,7 +138,9 @@ public sealed class FlaxTransport : ITransport
                     }
                     finally
                     {
-                        peer.RecycleMessage(evt.Message);
+                        // A handler can disconnect and shut down this peer's message pool.
+                        if (ReferenceEquals(peer, isServer ? _serverPeer : _clientPeer))
+                            peer.RecycleMessage(evt.Message);
                     }
                     break;
             }
@@ -162,7 +164,7 @@ public sealed class FlaxTransport : ITransport
         
         msg.WriteInt32(data.Count);
         if (data.Count > 0)
-            msg.WriteBytes(data.Array, data.Count);
+            msg.WriteBytes(data.Offset == 0 ? data.Array : data.ToArray(), data.Count);
     }
 
     private ArraySegment<byte> ReadPayload(ref NetworkMessage msg)

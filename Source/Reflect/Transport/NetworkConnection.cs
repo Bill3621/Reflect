@@ -51,26 +51,44 @@ public sealed class LoopbackTransport : ITransport
     private const int ClientConnId = 1;
 
     public void ServerStart() => _serverUp = true;
-    public void ServerStop() => _serverUp = false;
+    public void ServerStop()
+    {
+        _serverUp = false;
+        _toServer.Clear();
+        _toClient.Clear();
+        if (!_clientUp) return;
+        _clientUp = false;
+        OnClientDisconnected?.Invoke();
+    }
 
     public void ServerSend(int connectionId, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
-        => _toClient.Enqueue(data.ToArray());
+    {
+        if (_serverUp && _clientUp && connectionId == ClientConnId)
+            _toClient.Enqueue(data.ToArray());
+    }
 
     public void ClientConnect()
     {
+        if (_clientUp) return;
+        if (!_serverUp) throw new InvalidOperationException("Loopback requires a running server.");
         _clientUp = true;
         OnClientConnected?.Invoke();
         OnServerConnected?.Invoke(ClientConnId);
     }
 
-    public void ClientSend(ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered) => _toServer.Enqueue(data.ToArray());
+    public void ClientSend(ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
+    {
+        if (_serverUp && _clientUp) _toServer.Enqueue(data.ToArray());
+    }
 
     public void ClientDisconnect()
     {
         if (!_clientUp) return;
         _clientUp = false;
+        _toServer.Clear();
+        _toClient.Clear();
         OnClientDisconnected?.Invoke();
-        OnServerDisconnected?.Invoke(ClientConnId);
+        if (_serverUp) OnServerDisconnected?.Invoke(ClientConnId);
     }
 
     public void Poll()

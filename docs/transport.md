@@ -93,7 +93,7 @@ Because of this prefix, the practical max Reflect payload per send is `MessageSi
 
 It never touches the network. This makes it handy for unit tests, automated checks, or local prototyping where you want a server and client in the same process without sockets.
 
-`LoopbackTransport` copies data into new arrays on enqueue so the queues own their bytes. It ignores the `channelType` argument since there is no real network layer to configure reliability on.
+Both transports honor the offset and count of each `ArraySegment<byte>`. `LoopbackTransport` copies each segment into a new array on enqueue. It requires a running server before connecting, discards queued packets on disconnect or stop, and notifies its client when the server stops. It ignores `channelType` because there is no real network layer to configure reliability on.
 
 ## Channel types
 

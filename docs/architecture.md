@@ -73,6 +73,10 @@ This split exists because spawning the relevant world into a new client takes a 
 
 Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
 
+Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. A host client disconnect does not despawn the server's shared world; stopping the host server also disconnects its local client. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing.
+
+`RebuildTransport()` keeps the current transport while either endpoint is active. Address, port, and connection-limit changes take effect after both endpoints stop and the transport is rebuilt.
+
 ## Interest management
 
 Not every client needs to know about every object. In a large world, sending spawn, despawn, and state-sync data for objects a player cannot see wastes bandwidth and CPU. Interest management lets the server filter which objects each connection observes.
@@ -97,11 +101,11 @@ The server rebuilds observers on three triggers: when an object spawns or despaw
 
 The naive approach (just running both) has a problem: the server creates objects in the scene, then sends spawn messages to the client, which creates the same objects again. Two copies of everything. Reflect avoids this by sharing state.
 
-When `IsHost` is true, the client's `Spawned` dictionary delegates to the server's. They are the same dictionary. Spawn and despawn messages arriving from the transport are skipped by the client because the server already created (or removed) the object locally. State sync messages are skipped too, since the server's SyncVars are already at their current values in shared memory.
+A client that connects while the local server is active shares that server's `Spawned` dictionary for the connection's lifetime. It does not create or destroy duplicate actors from spawn/despawn messages, and it skips state deserialization because the server's SyncVars are already current in shared memory. It still reads the ownership flag from spawn messages delivered to the local client.
 
 RPCs are the exception. They still go through the transport and arrive via the client's message handler, because RPCs are one-shot events rather than state. The host's commands travel to the server, and the server's ClientRpcs travel back to the host's client, same as any other client.
 
-Ownership in host mode is set directly. When the server calls `SendSpawn` for the host's connection, it sets `IsOwnedLocally` on the `NetworkIdentity` right there instead of writing it to the wire for the client to read back. This is why `NetworkTransform` checks `IsLocalOwner` before applying position from a `CmdMove` on the host: the server already moved the object locally, so applying it again would double the movement.
+The host client sets `IsOwnedLocally` from the spawn messages it receives. Sending a spawn to a remote observer does not change the shared identity's local ownership. `NetworkTransform` checks `IsLocalOwner` before applying a `CmdMove` on the host because the owning host client already moved that shared actor.
 
 ## SyncVar dirty tracking
 

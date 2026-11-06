@@ -42,6 +42,22 @@ public class NetworkIdentity : Script
         }
     }
 
+    internal void NotifyDespawn()
+    {
+        foreach (var script in Scripts)
+        {
+            try { script.OnNetworkDespawn(); }
+            catch (Exception ex) { Debug.LogException(ex); }
+        }
+    }
+
+    internal void ResetNetworkState()
+    {
+        NetId = 0;
+        Owner = null;
+        IsOwnedLocally = false;
+    }
+
     public bool AnyDirty()
     {
         var s = Scripts;

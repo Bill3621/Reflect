@@ -43,6 +43,12 @@ public class NetworkTransform : NetworkScript
       _lastSendRot = Actor.Orientation;
    }
 
+   public override void OnNetworkDespawn()
+   {
+      _buffer.Clear();
+      _sendAccum = 0;
+   }
+
    public override void OnUpdate()
    {
       if (IsLocalOwner || (!ClientAuthority && IsServer))

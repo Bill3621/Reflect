@@ -75,7 +75,7 @@ public sealed class GridInterest : IInterestManagement
 
     public void Rebuild(IReadOnlyCollection<NetworkIdentity> all)
     {
-        foreach(var list in _cells.Values) list.Clear();
+        _cells.Clear();
         
         foreach (var ni in all)
         {
