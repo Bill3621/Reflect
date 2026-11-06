@@ -18,5 +18,6 @@ public class Reflect : GameModule
         base.Setup(options);
         
         options.ScriptingAPI.IgnoreMissingDocumentationWarnings = true;
+        options.ScriptingAPI.SystemReferences.Add("System.Diagnostics.Process");
     }
 }
