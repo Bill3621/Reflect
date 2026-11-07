@@ -90,6 +90,22 @@ public sealed class NetworkReader
         _pos += length;
         return segment;
     }
+    
+    public object ReadEnum(TypeCode code)
+    {
+        return code switch
+        {
+            TypeCode.Byte => ReadByte(),
+            TypeCode.SByte => unchecked((sbyte)ReadByte()),
+            TypeCode.Int16 => (short)ReadInt(),
+            TypeCode.UInt16 => (ushort)ReadUIntVar(),
+            TypeCode.Int32 => ReadInt(),
+            TypeCode.UInt32 => ReadUIntVar(),
+            TypeCode.Int64 => ReadLong(),
+            TypeCode.UInt64 => ReadULongVar(),
+            _ => throw new NotSupportedException($"Unsupported enum type: {code}")
+        };
+    }
 
     public T Read<T>() => Serializer<T>.Read(this);
 

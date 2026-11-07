@@ -77,6 +77,39 @@ public sealed class NetworkWriter
         Position += seg.Count;
     }
 
+    public void WriteEnum(TypeCode code, object value)
+    {
+        switch (code)
+        {
+            case TypeCode.Byte:
+                WriteByte(Convert.ToByte(value));
+                break;
+            case TypeCode.SByte:
+                WriteByte((byte)Convert.ToSByte(value));
+                break;
+            case TypeCode.Int16:
+                WriteInt(Convert.ToInt16(value));
+                break;
+            case TypeCode.UInt16:
+                WriteUIntVar(Convert.ToUInt16(value));
+                break;
+            case TypeCode.Int32:
+                WriteInt(Convert.ToInt32(value));
+                break;
+            case TypeCode.UInt32:
+                WriteUIntVar(Convert.ToUInt16(value));
+                break;
+            case TypeCode.Int64:
+                WriteLong(Convert.ToInt64(value));
+                break;
+            case TypeCode.UInt64:
+                WriteULongVar(Convert.ToUInt64(value));
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported enum type: {code}");
+        }
+    }
+
     public void Write<T>(T value) => Serializer<T>.Write(this, value);
 
     private int _msgLenPos;

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using FlaxEngine;
 
 namespace Reflect;
@@ -11,6 +12,12 @@ public static class Serializer<T>
 {
     public static WriteFunc<T> Write;
     public static ReadFunc<T> Read;
+
+    static Serializer()
+    {
+        if (typeof(T).IsEnum)
+            Serializers.RegEnum<T>();
+    }
 }
 
 public static class Serializers
@@ -48,8 +55,28 @@ public static class Serializers
         Readers[typeof(T)] = reader => r(reader);
     }
 
+    public static void RegEnum<T>()
+    {
+        var type = typeof(T);
+        if (!type.IsEnum)
+            throw new InvalidOperationException($"{type.Name} is not an enum");
+        
+        var code = Type.GetTypeCode(Enum.GetUnderlyingType(type));
+
+        Reg<T>((w, v) => w.WriteEnum(code, v), r => (T)Enum.ToObject(type, r.ReadEnum(code)));
+    }
+
+    private static void EnsureRegistered(Type t)
+    {
+        if (!t.IsEnum || Writers.ContainsKey(t)) return;
+        
+        RuntimeHelpers.RunClassConstructor(typeof(Serializer<>).MakeGenericType(t).TypeHandle);
+    }
+    
     public static void WriteBoxed(NetworkWriter w, Type t, object v)
     {
+        EnsureRegistered(t);
+        
         if (!Writers.TryGetValue(t, out var fn))
             throw new InvalidOperationException($"No serializer for {t.Name}");
         fn(w, v);
@@ -57,6 +84,8 @@ public static class Serializers
     
     public static object ReadBoxed(NetworkReader r, Type t)
     {
+        EnsureRegistered(t);
+
         return !Readers.TryGetValue(t, out var fn) ? throw new InvalidOperationException($"No serializer for {t.Name}") : fn(r);
     }
 }
