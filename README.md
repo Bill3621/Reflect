@@ -16,7 +16,7 @@ Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to t
 - `NetworkTransform` with client-authoritative movement, snapshot interpolation, configurable send rate, and movement thresholds
 - Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects they can actually see
 - Server-driven scene changes (`Server.ChangeScene`), with late joiners loading the server's current scene
-- `ReflectSettings` asset for project-wide config, plus a `NetworkManagerUI` script for auto start and editor buttons
+- `ReflectSettings` asset for project-wide config, with no scene setup needed to start a session
 - Editor toolbar button that launches a separate headless server, auto-starts the local client, and forwards server logs
 - Automatic enum serialization for RPC arguments, SyncVars, and synchronized collections
 - Compact `NetworkWriter` / `NetworkReader` using varint encoding
@@ -32,7 +32,7 @@ git submodule add https://github.com/Bill3621/Reflect.git Plugins/Reflect
 
 ## Usage
 
-`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Configure address, port, max connections, and spawnable prefabs in a `ReflectSettings` asset registered under Game Settings > Custom Settings as `Reflect`. Add a `NetworkManagerUI` script to the startup scene. Save the scene, enter Play mode, and click `Start Server` in the editor toolbar to launch a separate headless server. Reflect starts the editor's client after the server is ready.
+`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Configure address, port, max connections, and spawnable prefabs in a `ReflectSettings` asset registered under Game Settings > Custom Settings as `Reflect`. Save the scene, enter Play mode, and click `Start Server` in the editor toolbar to launch a separate headless server. Reflect starts the editor's client after the server is ready.
 
 To network an object, put `NetworkIdentity` on the prefab root and subclass `NetworkScript`:
 
@@ -64,7 +64,7 @@ public class PlayerHealth : NetworkScript
 }
 ```
 
-For packaged builds, start the server or client with command-line arguments (`server` / `client`). The `NetworkManagerUI` inspector buttons start each role in the current process. A process runs either the server or the client, never both. See [Getting started](https://bill3621.github.io/Reflect/getting-started) for the editor workflow.
+For packaged builds, start the server or client with command-line arguments (`server` / `client`). `NetworkManager.Instance.StartServer()` / `StartClient()` start a role from code. A process runs either the server or the client, never both. See [Getting started](https://bill3621.github.io/Reflect/getting-started) for the editor workflow.
 
 ## Architecture
 

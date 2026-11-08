@@ -28,15 +28,21 @@ public class NetworkManager : GamePlugin
     {
         Instance = this;
         Scripting.Update += OnUpdate;
+        Level.SceneLoaded += OnSceneLoaded;
         Serializers.Init();
     }
 
-    private bool _hasStarted;
-    /// <summary>Starts the role given on the command line (<c>server</c> or <c>client</c>). Runs once per process.</summary>
-    public void OnStart()
+    /// <summary>Starts the command-line role once the first scene loads in play mode. Runs once per process.</summary>
+    private void OnSceneLoaded(Scene scene, Guid sceneId)
     {
-        if (_hasStarted) return;
-        _hasStarted = true;
+        if (!Engine.IsPlayMode) return;
+        Level.SceneLoaded -= OnSceneLoaded;
+        StartFromCommandLine();
+    }
+
+    /// <summary>Starts the role given on the command line (<c>server</c> or <c>client</c>), if any.</summary>
+    private void StartFromCommandLine()
+    {
         var args = Engine.CommandLine;
         if (args.Contains("server"))
         {
@@ -120,6 +126,7 @@ public class NetworkManager : GamePlugin
     public override void Deinitialize()
     {
         Scripting.Update -= OnUpdate;
+        Level.SceneLoaded -= OnSceneLoaded;
         Client?.Disconnect();
         Server?.Stop();
         Client = null;
@@ -127,7 +134,6 @@ public class NetworkManager : GamePlugin
         _transport = null;
         _registry.Clear();
         _accum = 0;
-        _hasStarted = false;
         if (Instance == this) Instance = null;
     }
 }

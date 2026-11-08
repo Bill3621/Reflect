@@ -35,7 +35,7 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 
 Your game scripts are plain `NetworkScript` subclasses. They declare `SyncVar<T>` fields and methods marked with RPC attributes. Reflect never asks you to touch sockets or frames. Everything below your scripts is the plugin.
 
-The Session layer (`NetworkManager`, `NetworkManagerUI`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`, `NetworkRef`, interest management) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
+The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkIdentity`, `NetworkScript`, `RpcRegistry`, `NetworkRef`, interest management) owns the gameplay-facing API. The Core layer (`NetworkWriter`, `NetworkReader`, `Serializer`, `SyncVar`) handles encoding. The Transport layer is a thin abstraction over Flax's `NetworkPeer`.
 
 ## The transport abstraction
 

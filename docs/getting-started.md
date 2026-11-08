@@ -62,7 +62,7 @@ Do the same for your editor target (`GameProjectEditorTarget`). After that, rege
 
 Settings are re-read each time a server or client starts, so edits apply on the next start. Without the asset Reflect logs a warning and uses the defaults.
 
-Add a `NetworkManagerUI` script to an actor in the scene each process starts in. It waits a short delay after the scene loads (0.25s), then calls `OnStart()` which checks the command line for `server` or `client`. The inspector's `Start Server` and `Start Client` buttons start those roles in the current process. The editor toolbar's `Start Server` button launches a separate server process, as described below.
+No scene setup is needed to start a session. When the first scene loads in play mode, `NetworkManager` checks the command line for `server` or `client` and starts that role. Call `NetworkManager.Instance.StartServer()` or `StartClient()` to start a role from your own code. The editor toolbar's `Start Server` button launches a separate server process, as described below.
 
 ## Write a NetworkScript
 
@@ -102,11 +102,11 @@ The client calls `RequestRespawn`, which sends a `[Command]` to the server. The 
 
 ### In the editor
 
-1. Create the `ReflectSettings` asset (see above) and add `NetworkManagerUI` to the scene. Use `127.0.0.1` for the local server.
+1. Create the `ReflectSettings` asset (see above). Use `127.0.0.1` for the local server.
 2. Save the scene and enter Play mode.
 3. Click `Start Server` in the editor's top toolbar. The button is enabled only during Play mode.
 
-Reflect launches another Flax Editor process with the same project and the first loaded scene. That process runs headless, with rendering and audio disabled, skips script compilation, and passes `server` to `NetworkManager.OnStart()`. It loads the saved scene asset rather than copying the editor's live scene, so save your changes before starting.
+Reflect launches another Flax Editor process with the same project and the first loaded scene. That process runs headless, with rendering and audio disabled, skips script compilation, and passes `server` on the command line. It loads the saved scene asset rather than copying the editor's live scene, so save your changes before starting.
 
 Once the server signals that startup is complete, Reflect calls `NetworkManager.StartClient()` in the editor. An already-active client is left alone. Server logs appear in the editor Output window with a `[Server]` prefix.
 
@@ -114,7 +114,7 @@ The toolbar button changes to `Stop Server`. Clicking it, leaving Play mode, or 
 
 ### From the command line
 
-You can launch each role in a packaged game. Keep `NetworkManagerUI` in the startup scene so it calls `NetworkManager.OnStart()`:
+You can launch each role in a packaged game. The role starts once the startup scene loads:
 
 ```bash
 # Start a server

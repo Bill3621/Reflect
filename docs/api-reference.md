@@ -17,15 +17,8 @@ Configuration (address, port, prefabs, etc.) comes from the `ReflectSettings` as
 - `NetworkServer Server`, `NetworkClient Client`
 - `void StartServer()`, `void StartClient()`
 - `void ReloadSettings()` (no-op while a server or client is active)
-- `void OnStart()` (reads command-line args for `server` / `client`)
 
-### NetworkManagerUI
-
-A Flax `Script` you place in the scene a process starts in. After a short delay (0.25s) it calls `NetworkManager.OnStart()`, and it provides editor buttons for starting and stopping the server and client.
-
-- `[ShowInEditor] bool Initialized`, `bool IsServer`, `bool IsClient`
-- `[Button] void StartServer()`, `void StartClient()`
-- `[Button] void StopServer()`, `void StopClient()`
+When the first scene loads in play mode, the manager starts the role named on the command line (`server` / `client`), once per process.
 
 ### ReflectSettings
 
@@ -294,7 +287,7 @@ Helpers for the message header byte.
 
 ### ReflectEditorPlugin
 
-An editor-only Flax `EditorPlugin` that adds a `Start Server` / `Stop Server` toolbar button during Play mode. It launches a separate headless editor process using the same project and first loaded scene, forwards its logs to the editor, and auto-starts the local client through `NetworkManagerUI` after the server is ready. Stopping the child process or ending Play mode disconnects the auto-started client. An unexpected process exit uses the same cleanup.
+An editor-only Flax `EditorPlugin` that adds a `Start Server` / `Stop Server` toolbar button during Play mode. It launches a separate headless editor process using the same project and first loaded scene, forwards its logs to the editor, and auto-starts the local client after the server is ready. Stopping the child process or ending Play mode disconnects the auto-started client. An unexpected process exit uses the same cleanup.
 
 The toolbar button does not call the inspector's `StartServer()` in the current process. See [Getting started](/getting-started#in-the-editor) for setup and saved-scene requirements.
 
