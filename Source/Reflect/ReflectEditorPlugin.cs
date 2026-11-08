@@ -21,8 +21,8 @@ public class ReflectEditorPlugin : EditorPlugin
     private ToolStripButton _serverButton;
     private Process _serverProcess;
     private readonly Queue<(LogType Type, string Message)> _serverLogs = new();
-    private volatile bool _serverReady;
-    private bool _autoStartedClient;
+    private volatile Process _readyServer;
+    private NetworkClient _autoStartedClient;
 
     private bool IsServerRunning => _serverProcess is { HasExited: false };
 
@@ -55,8 +55,12 @@ public class ReflectEditorPlugin : EditorPlugin
 
         StopServer();
 
-        _serverButton?.Dispose();
-        _serverButton = null;
+        if (_serverButton != null)
+        {
+            _serverButton.Clicked -= OnServerButtonClicked;
+            _serverButton.Dispose();
+            _serverButton = null;
+        }
 
         _separator?.Dispose();
         _separator = null;
@@ -106,35 +110,37 @@ public class ReflectEditorPlugin : EditorPlugin
             }
         }
 
-        if (_serverReady)
+        if (_serverProcess is { HasExited: true })
         {
-            if (NetworkManager.IsClient)
-            {
-                _serverReady = false;
-            }
-            else if (NetworkManager.Instance != null)
-            {
-                foreach (var ui in Level.GetScripts<NetworkManagerUI>())
-                {
-                    _serverReady = false;
-
-                    ui.StartClient();
-                    _autoStartedClient = NetworkManager.IsClient;
-
-                    Debug.Log("[Reflect] Auto-started client.");
-                    break;
-                }
-            }
+            Debug.LogWarning($"Server exited with code {_serverProcess.ExitCode}.");
+            StopServer();
+            return;
         }
-        
-        if (_serverProcess is not { HasExited: true }) return;
-        
-        Debug.LogWarning($"Server exited with code {_serverProcess.ExitCode}.");
-        
-        _serverProcess.Dispose();
-        _serverProcess = null;
-        
-        UpdateButton();
+
+        if (!IsServerRunning || _readyServer != _serverProcess || NetworkManager.Instance == null)
+            return;
+
+        if (NetworkManager.IsClient)
+        {
+            _readyServer = null;
+            return;
+        }
+
+        foreach (var ui in Level.GetScripts<NetworkManagerUI>())
+        {
+            _readyServer = null;
+            try
+            {
+                ui.StartClient();
+                _autoStartedClient = NetworkManager.Instance.Client;
+                Debug.Log("[Reflect] Auto-started client.");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Reflect] Failed to auto-start client: {ex}");
+            }
+            break;
+        }
     }
 
     private void OnServerButtonClicked()
@@ -225,8 +231,7 @@ public class ReflectEditorPlugin : EditorPlugin
         catch (Exception ex)
         {
             Debug.LogError($"Failed to start server: {ex}");
-            _serverProcess?.Dispose();
-            _serverProcess = null;
+            StopServer();
         }
         
         UpdateButton();
@@ -234,22 +239,22 @@ public class ReflectEditorPlugin : EditorPlugin
 
     private void StopServer()
     {
-
-        _serverReady = false;
-        if (_autoStartedClient)
+        Process process;
+        lock (_serverLogs)
         {
-            NetworkManager.Instance?.Client?.Disconnect();
-            _autoStartedClient = false;
+            process = _serverProcess;
+            _serverProcess = null;
+            _readyServer = null;
+            _serverLogs.Clear();
         }
-        
-        if (_serverProcess == null)
-            return;
-        
+        var client = _autoStartedClient;
+        _autoStartedClient = null;
+
         try
         {
-            if (!_serverProcess.HasExited)
+            if (process is { HasExited: false })
             {
-                _serverProcess.Kill(entireProcessTree: true);
+                process.Kill(entireProcessTree: true);
                 Debug.Log("Server stop requested.");
             }
         }
@@ -259,11 +264,15 @@ public class ReflectEditorPlugin : EditorPlugin
         }
         finally
         {
-            _serverProcess.Dispose();
-            _serverProcess = null;
+            if (process != null)
+            {
+                process.OutputDataReceived -= OnServerOutput;
+                process.ErrorDataReceived -= OnServerErrorOutput;
+                process.Dispose();
+            }
+            client?.Disconnect();
+            UpdateButton();
         }
-
-        UpdateButton();
     }
     
     private void OnServerErrorOutput(object sender, DataReceivedEventArgs e)
@@ -271,14 +280,12 @@ public class ReflectEditorPlugin : EditorPlugin
         if (e.Data?.Trim() != "REFLECT_SERVER_READY")
             return;
 
-        _serverReady = true;
-
         lock (_serverLogs)
         {
-            _serverLogs.Enqueue((
-                LogType.Info,
-                "Server ready signal received."
-            ));
+            // Ignore delayed signals from a stopped process.
+            if (sender != _serverProcess) return;
+            _readyServer = (Process)sender;
+            _serverLogs.Enqueue((LogType.Info, "Server ready signal received."));
         }
     }
     
@@ -300,7 +307,10 @@ public class ReflectEditorPlugin : EditorPlugin
             var message = Encoding.UTF8.GetString(Convert.FromBase64String(data[(separator + 1)..]));
             
             lock (_serverLogs)
+            {
+                if (sender != _serverProcess) return;
                 _serverLogs.Enqueue(((LogType)type, message));
+            }
         }
         catch (FormatException)
         {

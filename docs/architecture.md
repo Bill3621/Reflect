@@ -97,7 +97,7 @@ The server rebuilds observers on three triggers: when an object spawns or despaw
 
 ## Host mode
 
-`StartHost()` starts the server and client in the same process. This is useful for single-player, local co-op, or a listen-server setup where one player hosts and plays.
+`StartHost()` starts the server and client in the same process. It is marked obsolete because gameplay scripts may need changes to handle shared server/client objects. The editor toolbar's [separate-server workflow](/getting-started#in-the-editor) avoids shared objects and is the preferred way to test both roles locally.
 
 The naive approach (just running both) has a problem: the server creates objects in the scene, then sends spawn messages to the client, which creates the same objects again. Two copies of everything. Reflect avoids this by sharing state.
 

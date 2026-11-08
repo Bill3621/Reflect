@@ -42,6 +42,23 @@ private static void OnHealthChanged(int old, int current)
 }
 ```
 
+## Enum values
+
+Enums work without manual serializer registration, including `[Flags]` combinations. You can use them in a `SyncVar`, as list elements, or as dictionary keys and values:
+
+```csharp
+public enum MatchPhase : byte { Lobby = 0, Playing = 1, Finished = 2 }
+
+public class MatchState : NetworkScript
+{
+    public readonly SyncVar<MatchPhase> Phase = new(MatchPhase.Lobby);
+    public readonly SyncList<MatchPhase> PhaseHistory = new();
+    public readonly SyncDictionary<MatchPhase, int> RoundCounts = new();
+}
+```
+
+Only the numeric value goes over the wire. Keep the backing type and numeric assignments consistent between client and server. See [Serializers](/api-reference#serializers) for the encoding and supported backing types.
+
 ## Dirty tracking
 
 Writing to `Value` only marks the SyncVar dirty when the new value differs from the old one. The comparison uses `EqualityComparer<T>.Default`, so value types compare by value and reference types (like `string`) compare by their default equality.

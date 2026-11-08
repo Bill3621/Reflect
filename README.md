@@ -16,6 +16,8 @@ Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to t
 - `NetworkTransform` with client-authoritative movement, snapshot interpolation, configurable send rate, and movement thresholds
 - Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects they can actually see
 - `NetworkManagerUI` script for inspector-driven config and editor buttons
+- Editor toolbar button that launches a separate headless server, auto-starts the local client, and forwards server logs
+- Automatic enum serialization for RPC arguments, SyncVars, and synchronized collections
 - Compact `NetworkWriter` / `NetworkReader` using varint encoding
 - Per-packet reliability control, so state sync goes reliable and movement/voice goes unreliable
 
@@ -29,7 +31,7 @@ git submodule add https://github.com/Bill3621/Reflect.git Plugins/Reflect
 
 ## Usage
 
-`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Add a `NetworkManagerUI` script to a scene actor to configure address, port, max connections, and spawnable prefabs from the inspector. `NetworkManagerUI` also provides editor buttons for starting the server, client, or host.
+`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Add a `NetworkManagerUI` script to a scene actor to configure address, port, max connections, and spawnable prefabs from the inspector. Save the scene, enter Play mode, and click `Start Server` in the editor toolbar to launch a separate headless server. Reflect starts the editor's client after the server is ready.
 
 To network an object, put `NetworkIdentity` on the prefab root and subclass `NetworkScript`:
 
@@ -61,7 +63,7 @@ public class PlayerHealth : NetworkScript
 }
 ```
 
-Start the server or client from command line args (`server` / `client`) or use the editor buttons on `NetworkManager`.
+For packaged builds, start the server or client with command-line arguments (`server` / `client`). The `NetworkManagerUI` inspector buttons start each role in the current process. `StartHost()` is deprecated because gameplay scripts may need changes to support its shared server/client objects. See [Getting started](https://bill3621.github.io/Reflect/getting-started) for the editor workflow.
 
 ## Architecture
 

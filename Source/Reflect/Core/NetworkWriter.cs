@@ -97,7 +97,7 @@ public sealed class NetworkWriter
                 WriteInt(Convert.ToInt32(value));
                 break;
             case TypeCode.UInt32:
-                WriteUIntVar(Convert.ToUInt16(value));
+                WriteUIntVar(Convert.ToUInt32(value));
                 break;
             case TypeCode.Int64:
                 WriteLong(Convert.ToInt64(value));

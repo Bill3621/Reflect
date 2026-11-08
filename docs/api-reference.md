@@ -6,7 +6,7 @@ This is a quick map of the public types in the `Reflect` namespace and what they
 
 ### NetworkManager
 
-A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. `StartHost()` runs both server and client in one process for local play.
+A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. `StartHost()` runs both server and client in one process, but is marked obsolete because gameplay scripts may need changes to support shared objects.
 
 Configuration (address, port, prefabs, etc.) is pushed in by `NetworkManagerUI`. The plugin itself initializes during `Initialize()` and ticks via `Scripting.Update`.
 
@@ -159,10 +159,11 @@ Writes primitives into a growable byte buffer. Starts at 1500 bytes and doubles 
 - `void WriteByte(byte)`, `void WriteInt(int)`, `void WriteLong(long)`
 - `void WriteFloat(float)`, `void WriteUIntVar(uint)`, `void WriteULongVar(ulong)`
 - `void WriteString(string)`, `void WriteGuid(Guid)`, `void WriteBytes(ArraySegment<byte>)`
+- `void WriteEnum(TypeCode code, object value)`
 - `void Write<T>(T value)`
 - `void BeginMessage(MsgType type)`, `void FinishMessage()`
 
-`WriteInt` and `WriteLong` use ZigZag plus varint encoding.
+`WriteInt` and `WriteLong` use ZigZag plus varint encoding. `Write<T>` supports enums automatically. `WriteEnum` is the low-level form and takes the enum's underlying integral `TypeCode`.
 
 ### NetworkReader
 
@@ -173,12 +174,15 @@ Reads primitives back from a byte buffer. Point it at a segment with `SetBuffer`
 - `byte ReadByte()`, `int ReadInt()`, `long ReadLong()`
 - `float ReadFloat()`, `uint ReadUIntVar()`, `ulong ReadULongVar()`
 - `string ReadString()`, `Guid ReadGuid()`, `ArraySegment<byte> ReadBytes()`
+- `object ReadEnum(TypeCode code)`
 - `T Read<T>()`
 - `int ReadLength()`, `void SkipRemaining(int msgEnd)`
 
+`Read<T>` returns the requested enum type. `ReadEnum` returns its underlying integral value as an `object`; it does not construct the enum itself.
+
 ### Serializer&lt;T&gt;
 
-Generic static access point for per-type serializers.
+Generic static access point for per-type serializers. Enum types register themselves on first use.
 
 - `static WriteFunc<T> Write`
 - `static ReadFunc<T> Read`
@@ -187,11 +191,24 @@ Generic static access point for per-type serializers.
 
 Static registry and initializer for the built-in type serializers.
 
-- `static void Init()` (registers the built-in types)
+- `static void Init()` registers the built-in types. `NetworkManager.Initialize()` calls it automatically.
+- `static void RegEnum<T>()` registers an enum explicitly and throws `InvalidOperationException` for a non-enum type. Normal enum use does not need this call.
 - `static void WriteBoxed(NetworkWriter w, Type t, object v)`
 - `static object ReadBoxed(NetworkReader r, Type t)`
 
 Built-in types: `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, `NetworkRef`.
+
+Enums work through both the generic and boxed APIs without manual registration, including `[Flags]` combinations and all eight C# enum backing types. Reflect sends numeric values, not names or type metadata. Both peers must agree on the enum's backing type and numeric assignments.
+
+| Enum backing type | Encoding |
+| --- | --- |
+| `byte`, `sbyte` | One byte |
+| `short`, `int` | ZigZag plus a 32-bit varint |
+| `ushort`, `uint` | Unsigned 32-bit varint |
+| `long` | ZigZag plus a 64-bit varint |
+| `ulong` | Unsigned 64-bit varint |
+
+Enum support does not register `sbyte`, `short`, or `ushort` as standalone serializer types. Deserialization preserves undefined enum values and does not call `Enum.IsDefined`; validate values in gameplay code when only specific choices are allowed.
 
 ### SyncVar&lt;T&gt;
 
@@ -266,6 +283,14 @@ Helpers for the message header byte.
 
 - `static void WriteHeader(NetworkWriter w, MsgType t)`
 - `static MsgType ReadHeader(NetworkReader r)`
+
+## Editor
+
+### ReflectEditorPlugin
+
+An editor-only Flax `EditorPlugin` that adds a `Start Server` / `Stop Server` toolbar button during Play mode. It launches a separate headless editor process using the same project and first loaded scene, forwards its logs to the editor, and auto-starts the local client through `NetworkManagerUI` after the server is ready. Stopping the child process or ending Play mode disconnects the auto-started client. An unexpected process exit uses the same cleanup.
+
+The toolbar button does not call the inspector's `StartServer()` in the current process. See [Getting started](/getting-started#in-the-editor) for setup and saved-scene requirements.
 
 ## Transport
 
