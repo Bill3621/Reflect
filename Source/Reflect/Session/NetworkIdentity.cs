@@ -13,7 +13,11 @@ public class NetworkIdentity : Script
     [ReadOnly]
     public uint NetId { get; internal set; }
 
-    public ulong SceneId;
+    [ShowInEditor]
+    [ReadOnly]
+    public Guid SceneId { get; internal set; }
+
+    public bool IsSceneObject => SceneId != Guid.Empty;
 
     [ReadOnly]
     public Guid AssetId;

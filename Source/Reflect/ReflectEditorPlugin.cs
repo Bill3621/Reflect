@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using FlaxEditor;
+using FlaxEditor.Content;
 using FlaxEditor.GUI;
 using FlaxEngine;
 using FlaxEngine.Json;
@@ -23,6 +24,7 @@ public class ReflectEditorPlugin : EditorPlugin
     private readonly Queue<(LogType Type, string Message)> _serverLogs = new();
     private volatile Process _readyServer;
     private NetworkClient _autoStartedClient;
+    private CustomSettingsProxy _settingsProxy;
 
     private bool IsServerRunning => _serverProcess is { HasExited: false };
 
@@ -31,6 +33,9 @@ public class ReflectEditorPlugin : EditorPlugin
         base.InitializeEditor();
 
         if (Editor.IsHeadlessMode) return;
+
+        _settingsProxy = new CustomSettingsProxy(typeof(ReflectSettings), ReflectSettings.Key);
+        Editor.ContentDatabase.AddProxy(_settingsProxy, true);
 
         _separator = Editor.UI.ToolStrip.AddSeparator();
         _serverButton = Editor.UI.ToolStrip.AddButton("Start Server");
@@ -51,6 +56,12 @@ public class ReflectEditorPlugin : EditorPlugin
             Editor.PlayModeBegin -= OnPlayModeBegin;
             Editor.PlayModeEnd -= OnPlayModeEnd;
             Scripting.Update -= OnUpdate;
+        }
+
+        if (_settingsProxy != null)
+        {
+            Editor.ContentDatabase.RemoveProxy(_settingsProxy, true);
+            _settingsProxy = null;
         }
 
         StopServer();
@@ -126,20 +137,16 @@ public class ReflectEditorPlugin : EditorPlugin
             return;
         }
 
-        foreach (var ui in Level.GetScripts<NetworkManagerUI>())
+        _readyServer = null;
+        try
         {
-            _readyServer = null;
-            try
-            {
-                ui.StartClient();
-                _autoStartedClient = NetworkManager.Instance.Client;
-                Debug.Log("[Reflect] Auto-started client.");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[Reflect] Failed to auto-start client: {ex}");
-            }
-            break;
+            NetworkManager.Instance.StartClient();
+            _autoStartedClient = NetworkManager.Instance.Client;
+            Debug.Log("Auto-started client.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Failed to auto-start client: {ex}");
         }
     }
 

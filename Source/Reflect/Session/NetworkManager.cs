@@ -8,17 +8,11 @@ public class NetworkManager : GamePlugin
 {
     public static NetworkManager Instance { get; private set; }
 
-    [Tooltip("Prefabs that can be spawned over the network.")]
-    public Prefab[] SpawnablePrefabs;
+    /// <summary>Config read from the <see cref="ReflectSettings"/> asset when a session starts.</summary>
+    public ReflectSettings Settings { get; private set; } = new();
 
-    public float SyncInterval = 0.1f;
-
-    public string Address = "127.0.0.1";
-    public ushort Port = 7777;
-    public ushort MaxConnections = 16;
-    
     public event Action OnServerStarted;
-    
+
     public static bool IsServer => Instance?.Server is { Active: true };
     public static bool IsClient => Instance?.Client is { Active: true };
     public static bool IsHost => IsServer && IsClient;
@@ -28,7 +22,7 @@ public class NetworkManager : GamePlugin
     public NetworkClient Client { get; private set; }
 
     private ITransport _transport;
-    private Dictionary<Guid, Prefab> _registry;
+    private readonly Dictionary<Guid, Prefab> _registry = [];
     private float _accum;
 
     public override void Initialize()
@@ -36,12 +30,10 @@ public class NetworkManager : GamePlugin
         Instance = this;
         Scripting.Update += OnUpdate;
         Serializers.Init();
-
-        RebuildPrefabRegistry();
-        RebuildTransport();
     }
 
     private bool _hasStarted;
+    /// <summary>Starts the role given on the command line (<c>server</c> or <c>client</c>). Runs once per process.</summary>
     public void OnStart()
     {
         if (_hasStarted) return;
@@ -58,40 +50,34 @@ public class NetworkManager : GamePlugin
         }
     }
 
-    public void RebuildPrefabRegistry()
-    {
-        _registry ??= new Dictionary<Guid, Prefab>();
-        _registry.Clear();
-        if (SpawnablePrefabs == null) return;
-        foreach (var prefab in SpawnablePrefabs)
-            if (prefab)
-                _registry[prefab.ID] = prefab;
-    }
-    
+    /// <summary>
+    /// Re-reads <see cref="ReflectSettings"/> and rebuilds the prefab registry and transport.
+    /// Does nothing while a session is active, since both are in use. Start calls this, so edits apply on the next start.
+    /// </summary>
     [Button]
-    public void RebuildTransport()
+    public void ReloadSettings()
     {
         if (Server is { Active: true } || Client is { Active: true }) return;
+        Settings = ReflectSettings.Load();
+
+        _registry.Clear();
+        foreach (var prefab in Settings.SpawnablePrefabs ?? [])
+            if (prefab)
+                _registry[prefab.ID] = prefab;
+
         _transport = new FlaxTransport
         {
-            Address = Address,
-            Port = Port,
-            MaxConnections = MaxConnections,
+            Address = Settings.Address,
+            Port = Settings.Port,
+            MaxConnections = Settings.MaxConnections,
         };
-    }
-    
-    [Button]
-    [Obsolete("Some scripts might need to be adapted to work properly with this mode")]
-    public void StartHost()
-    {
-        StartServer();
-        StartClient();
     }
 
     [Button]
     public void StartServer()
     {
         if (Server is { Active: true }) return;
+        ReloadSettings();
         _accum = 0;
         Server = new NetworkServer(_transport, _registry)
         {
@@ -100,11 +86,12 @@ public class NetworkManager : GamePlugin
         Server.Start();
         OnServerStarted?.Invoke();
     }
-    
+
     [Button]
     public void StartClient()
     {
         if (Client is { Active: true }) return;
+        ReloadSettings();
         Client = new NetworkClient(_transport, _registry);
         Client.Connect();
     }
@@ -115,7 +102,7 @@ public class NetworkManager : GamePlugin
 
         if (!IsServer) return;
         _accum += Time.DeltaTime;
-        if (_accum < SyncInterval) return;
+        if (_accum < Settings.SyncInterval) return;
         _accum = 0;
         Server.Update();
         _transport?.Poll();
@@ -129,7 +116,7 @@ public class NetworkManager : GamePlugin
         Client = null;
         Server = null;
         _transport = null;
-        _registry?.Clear();
+        _registry.Clear();
         _accum = 0;
         _hasStarted = false;
         if (Instance == this) Instance = null;

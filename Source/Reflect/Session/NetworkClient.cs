@@ -10,6 +10,7 @@ namespace Reflect;
 
 public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab> prefabs)
 {
+    private readonly NetworkWriter _w = new();
     private readonly NetworkReader _packetReader = new();
     private readonly NetworkReader _r = new();
 
@@ -17,9 +18,19 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     private readonly List<SceneObjectState> _sceneStates = [];
     private NetworkServer _hostServer;
     public Dictionary<uint, NetworkIdentity> Spawned => _hostServer?.Spawned ?? _spawned;
-    public readonly Dictionary<ulong, NetworkIdentity> SceneObjects = [];
+    public readonly Dictionary<Guid, NetworkIdentity> SceneObjects = [];
     
     public bool Active { get; private set; }
+
+    /// <summary>The scene the server told this client to be in.</summary>
+    public SceneReference ActiveScene { get; private set; }
+    public bool IsLoadingScene => _loadingScene != Guid.Empty;
+    private Guid _loadingScene;
+    private uint _loadId;
+
+    /// <summary>Fires when the server moves this client to a scene. The old world is already torn down.</summary>
+    public event Action<SceneReference> OnSceneChanging;
+    /// <summary>Fires once per scene, after the server sent that scene's world.</summary>
     public event Action OnReady;
 
     public void Connect()
@@ -29,9 +40,9 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         _hostServer = NetworkManager.IsServer ? NetworkManager.Instance.Server : null;
         transport.OnClientData += OnData;
         transport.OnClientDisconnected += OnDisconnected;
+        Level.SceneLoaded += OnLevelSceneLoaded;
         try
         {
-            if (_hostServer == null) RegisterSceneObjects();
             transport.ClientConnect();
         }
         catch
@@ -47,6 +58,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         Active = false;
         transport.OnClientData -= OnData;
         transport.OnClientDisconnected -= OnDisconnected;
+        Level.SceneLoaded -= OnLevelSceneLoaded;
         try
         {
             transport.ClientDisconnect();
@@ -56,29 +68,98 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
             if (_hostServer != null)
                 foreach (var identity in _hostServer.Spawned.Values)
                     identity.IsOwnedLocally = false;
-            foreach (var identity in _spawned.Values.ToArray())
-            {
-                identity.NotifyDespawn();
-                identity.ResetNetworkState();
-                if (identity.SceneId == 0) Object.Destroy(identity.Actor);
-            }
-            _spawned.Clear();
+            DespawnAll();
             foreach (var state in _sceneStates) state.Restore();
             _sceneStates.Clear();
             SceneObjects.Clear();
             _hostServer = null;
+            ActiveScene = default;
+            _loadingScene = Guid.Empty;
+            _loadId = 0;
             _packetReader.SetBuffer(default);
             _r.SetBuffer(default);
         }
     }
+    
+    private void DespawnAll()
+    {
+        foreach (var identity in _spawned.Values.ToArray())
+        {
+            identity.NotifyDespawn();
+            identity.ResetNetworkState();
+            if (!identity.IsSceneObject) Object.Destroy(identity.Actor);
+        }
+        _spawned.Clear();
+    }
 
     private void RegisterSceneObjects()
     {
-        foreach (var ni in Level.GetScripts<NetworkIdentity>().Where(x => x.SceneId != 0))
+        foreach (var ni in Level.GetScripts<NetworkIdentity>())
         {
+            ni.SceneId = ni.ID;
             SceneObjects.Add(ni.SceneId, ni);
             _sceneStates.Add(new SceneObjectState(ni));
         }
+    }
+
+    private void HandleLoadScene()
+    {
+        var scene = _r.ReadGuid();
+        var loadId = _r.ReadUIntVar();
+        if (_r.HasMore)
+            throw new InvalidDataException("LoadScene has trailing data.");
+
+        // The first load may target the scene this client already has open (editor play, same start scene).
+        var firstLoad = _loadId == 0;
+        DespawnAll();
+        _sceneStates.Clear();
+        SceneObjects.Clear();
+        _loadId = loadId;
+        ActiveScene = new SceneReference(scene);
+        _loadingScene = Guid.Empty;
+        OnSceneChanging?.Invoke(ActiveScene);
+
+        // The host client shares the server's world, which the server loads itself.
+        if (_hostServer != null)
+        {
+            SendSceneReady();
+            return;
+        }
+        if (firstLoad && Level.ScenesCount == 1 && Level.Scenes[0].ID == scene)
+        {
+            FinishSceneLoad();
+            return;
+        }
+
+        _loadingScene = scene;
+        // Flax returns true on failure.
+        if (Level.ChangeSceneAsync(scene))
+        {
+            Debug.LogError($"Server asked for scene {scene}, but it could not be loaded.");
+            Disconnect();
+        }
+    }
+
+    private void OnLevelSceneLoaded(Scene scene, Guid sceneId)
+    {
+        if (sceneId != _loadingScene) return;
+        _loadingScene = Guid.Empty;
+        FinishSceneLoad();
+    }
+
+    private void FinishSceneLoad()
+    {
+        RegisterSceneObjects();
+        SendSceneReady();
+    }
+
+    private void SendSceneReady()
+    {
+        _w.Reset();
+        _w.BeginMessage(MsgType.SceneReady);
+        _w.WriteUIntVar(_loadId);
+        _w.FinishMessage();
+        Send(_w.ToSegment());
     }
 
     private void OnDisconnected() => Disconnect();
@@ -94,8 +175,11 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
             {
                 var type = Msg.ReadHeader(_packetReader);
                 _r.SetBuffer(_packetReader.ReadSegment(_packetReader.ReadLength()));
+                // Nothing from the previous scene applies while the next one loads.
+                if (IsLoadingScene && type != MsgType.LoadScene) continue;
                 switch (type)
                 {
+                    case MsgType.LoadScene: HandleLoadScene(); break;
                     case MsgType.Spawn: HandleSpawn(); break;
                     case MsgType.Despawn: HandleDespawn(); break;
                     case MsgType.State: HandleState(); break;
@@ -115,7 +199,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     {
         var netId = _r.ReadUIntVar();
         var assetId = _r.ReadGuid();
-        var sceneId = _r.ReadULongVar();
+        var sceneId = _r.ReadGuid();
         var pos = _r.Read<Float3>();
         var rot = _r.Read<Quaternion>();
         var isOwner = _r.ReadByte() == 1;
@@ -135,7 +219,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         }
 
         NetworkIdentity ni;
-        if (sceneId != 0)
+        if (sceneId != Guid.Empty)
         {
             if (!SceneObjects.TryGetValue(sceneId, out ni))
             {
@@ -175,11 +259,11 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         catch (InvalidDataException)
         {
             Spawned.Remove(netId);
-            if (sceneId == 0) Object.Destroy(ni.Actor);
+            if (sceneId == Guid.Empty) Object.Destroy(ni.Actor);
             throw;
         }
 
-        if (sceneId != 0) ni.Actor.IsActive = true;
+        if (sceneId != Guid.Empty) ni.Actor.IsActive = true;
         foreach (var s in scripts) s.OnNetworkSpawn();
     }
 
@@ -191,7 +275,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         ni.NotifyDespawn();
         Spawned.Remove(netId);
         ni.ResetNetworkState();
-        if (ni.SceneId != 0)
+        if (ni.IsSceneObject)
             ni.Actor.IsActive = false;
         else
             Object.Destroy(ni.Actor);

@@ -65,9 +65,9 @@ The ordinal sort is what keeps IDs stable. As long as method names do not collid
 
 When a client connects, two things happen in sequence, and they fire different events.
 
-`OnPlayerConnected` fires immediately. The connection is registered and its `NetworkConnection` object is in the `Connections` dictionary. But the client does not yet know about any spawned objects. The server queues the connection as pending.
+`OnPlayerConnected` fires immediately. The connection is registered in `Connections` with `Phase = LoadingScene`, and the server sends it `LoadScene` with the server's current scene and load id. The client loads that scene (or keeps it, if it is the only scene it already has open), registers its scene objects, and answers `SceneReady`.
 
-On the next `Update` tick, if there are pending connections, `RebuildObservers()` runs first. It asks the interest management system which objects the new connection should see and sends spawn messages for those. Then the server drains the pending queue and sends `WelcomeDone` to each connection. After that, `OnPlayerLoaded` fires.
+On the next `Update` tick after `SceneReady`, the connection moves to `Syncing`. `RebuildObservers()` runs first. It asks the interest management system which objects the connection should see and sends spawn messages for those. Then the server sends `WelcomeDone`, moves the connection to `InGame`, and fires `OnPlayerLoaded`.
 
 This split exists because spawning the relevant world into a new client takes a full update tick. If `OnPlayerConnected` fired after the world was sent, gameplay code waiting for "player joined" would race against the spawn messages arriving on the client. The two-event model lets you react to the raw connection immediately (`OnPlayerConnected`) and to the ready-to-play state when the client has the world (`OnPlayerLoaded`).
 
@@ -75,7 +75,19 @@ Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you n
 
 Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. A host client disconnect does not despawn the server's shared world; stopping the host server also disconnects its local client. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing.
 
-`RebuildTransport()` keeps the current transport while either endpoint is active. Address, port, and connection-limit changes take effect after both endpoints stop and the transport is rebuilt.
+`ReloadSettings()` keeps the current transport while either endpoint is active. Address, port, and connection-limit changes take effect after both endpoints stop and the transport is rebuilt.
+
+## Scene changes
+
+One scene is active at a time, and the server decides which. `Server.ChangeScene(scene)` runs despawn hooks for every spawned object, destroys prefab actors, clears `Spawned`, moves every connection back to `LoadingScene`, sends each one `LoadScene`, and calls `Level.ChangeSceneAsync`. No per-object `Despawn` messages are sent, because `LoadScene` tells the client to drop its whole world. `NetworkManager` is a `GamePlugin`, so connections stay up across the load.
+
+Server and clients load in parallel. When the server's `Level.SceneLoaded` fires it registers the new scene objects and raises `OnSceneLoaded`. A connection moves on only once both its `SceneReady` for the current load id has arrived and the server has finished loading, so it does not matter which side is faster. From there it follows the normal join path, and `OnPlayerLoaded` fires again. A per-scene player spawner just listens to `OnPlayerLoaded` while its scene is loaded.
+
+Late joiners take the same path: `OnConnected` sends the current scene. The load id guards against a `SceneReady` from an older load. Net ids are never reused across scenes, so a Command still in flight for an old object misses `Spawned` and is dropped. While a connection is loading, the server sends it no spawns, state, or RPCs, and the client ignores anything except `LoadScene`. `Spawn()` is rejected while the server itself is loading.
+
+Scene objects are matched across peers by `NetworkIdentity.SceneId`, which is the identity script's own object ID from the scene file. There is nothing to set by hand. Prefabs spawned at runtime get random IDs and an empty `SceneId`.
+
+In host mode the host client shares the server's world, so it acks `LoadScene` right away and lets the server's load drive both.
 
 ## Interest management
 

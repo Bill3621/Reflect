@@ -47,7 +47,7 @@ It exposes a handful of properties you set before starting:
 - `MessageSize` (ushort, default `1500`)
 - `MessagePoolSize` (ushort, default `2048`)
 
-`NetworkManager` constructs a `FlaxTransport` from its own `Address`, `Port`, and `MaxConnections` fields. If you build a transport yourself, set these before calling `ServerStart` or `ClientConnect`.
+`NetworkManager` constructs a `FlaxTransport` from the `Address`, `Port`, and `MaxConnections` in its `ReflectSettings`. If you build a transport yourself, set these before calling `ServerStart` or `ClientConnect`.
 
 ### NetworkConfig
 

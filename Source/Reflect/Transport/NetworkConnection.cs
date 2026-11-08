@@ -5,9 +5,17 @@ using FlaxEngine.Networking;
 
 namespace Reflect;
 
+/// <summary>
+/// Where a connection is in joining the server's current scene.
+/// LoadingScene: told to load, waiting for its SceneReady. Syncing: receiving spawns this tick. InGame: WelcomeDone sent.
+/// </summary>
+public enum ConnectionPhase : byte { LoadingScene, Syncing, InGame }
+
 public sealed class NetworkConnection
 {
     public int Id;
+    public ConnectionPhase Phase { get; internal set; }
+    internal uint ReadyLoadId;
     public NetworkIdentity OwnedPlayer;
     public readonly HashSet<uint> Observing = [];
 }

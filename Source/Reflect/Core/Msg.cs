@@ -12,7 +12,9 @@ public enum MsgType : byte
     WelcomeDone = 4,
     Command = 5,
     ClientRpc = 6,
-    TargetRpc = 7
+    TargetRpc = 7,
+    LoadScene = 8,  // server -> client: Guid scene, uint loadId
+    SceneReady = 9  // client -> server: uint loadId
 }
 
 public static class Msg

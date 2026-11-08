@@ -15,7 +15,8 @@ Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to t
 - `NetworkIdentity` and `NetworkScript` for spawn/despawn lifecycle on prefabs
 - `NetworkTransform` with client-authoritative movement, snapshot interpolation, configurable send rate, and movement thresholds
 - Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects they can actually see
-- `NetworkManagerUI` script for inspector-driven config and editor buttons
+- Server-driven scene changes (`Server.ChangeScene`), with late joiners loading the server's current scene
+- `ReflectSettings` asset for project-wide config, plus a `NetworkManagerUI` script for auto start and editor buttons
 - Editor toolbar button that launches a separate headless server, auto-starts the local client, and forwards server logs
 - Automatic enum serialization for RPC arguments, SyncVars, and synchronized collections
 - Compact `NetworkWriter` / `NetworkReader` using varint encoding
@@ -31,7 +32,7 @@ git submodule add https://github.com/Bill3621/Reflect.git Plugins/Reflect
 
 ## Usage
 
-`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Add a `NetworkManagerUI` script to a scene actor to configure address, port, max connections, and spawnable prefabs from the inspector. Save the scene, enter Play mode, and click `Start Server` in the editor toolbar to launch a separate headless server. Reflect starts the editor's client after the server is ready.
+`NetworkManager` is a `GamePlugin` that initializes at the plugin level. Configure address, port, max connections, and spawnable prefabs in a `ReflectSettings` asset registered under Game Settings > Custom Settings as `Reflect`. Add a `NetworkManagerUI` script to the startup scene. Save the scene, enter Play mode, and click `Start Server` in the editor toolbar to launch a separate headless server. Reflect starts the editor's client after the server is ready.
 
 To network an object, put `NetworkIdentity` on the prefab root and subclass `NetworkScript`:
 

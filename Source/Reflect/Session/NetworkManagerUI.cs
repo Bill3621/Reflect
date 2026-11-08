@@ -3,20 +3,14 @@ using FlaxEngine;
 
 namespace Reflect;
 
+/// <summary>
+/// Put in the scene a process starts in. Starts the command-line role shortly after play begins and exposes
+/// inspector buttons. Config lives in the <see cref="ReflectSettings"/> asset, not here.
+/// </summary>
 public class NetworkManagerUI : Script
 {
-    [Tooltip("Prefabs that can be spawned over the network.")]
-    public Prefab[] SpawnablePrefabs;
-    
-    public float SyncInterval = 0.1f;
-
-    public string Address = "127.0.0.1";
-    public ushort Port = 7777;
-    public ushort MaxConnections = 16;
-
     [Header("States")]
     [ShowInEditor] public bool Initialized => NetworkManager.Instance != null;
-    [ShowInEditor] public bool IsHost => NetworkManager.IsHost;
     [ShowInEditor] public bool IsServer => NetworkManager.IsServer;
     [ShowInEditor] public bool IsClient => NetworkManager.IsClient;
 
@@ -27,52 +21,17 @@ public class NetworkManagerUI : Script
         if (_startTimer >= TimeBeforeStart) return;
         _startTimer += Time.DeltaTime;
         if (_startTimer < TimeBeforeStart) return;
-        RebuildNetworkManager();
-        NetworkManager.Instance.OnStart();
-    }
-
-
-    private void RebuildNetworkManager()
-    {
-        if (NetworkManager.Instance == null)
-        {
-            Debug.LogWarning("NetworkManager.Instance is null.");
-            return;
-        }
-        NetworkManager.Instance.SpawnablePrefabs = SpawnablePrefabs;
-        NetworkManager.Instance.SyncInterval = SyncInterval;
-        NetworkManager.Instance.Address = Address;
-        NetworkManager.Instance.Port = Port;
-        NetworkManager.Instance.MaxConnections = MaxConnections;
-        NetworkManager.Instance.RebuildPrefabRegistry();
-        NetworkManager.Instance.RebuildTransport();
-    }
-    
-    [Button]
-    [Obsolete("Some scripts might need to be adapted to work properly with this mode")]
-    public void StartHost()
-    {
-        RebuildNetworkManager();
-        NetworkManager.Instance.StartHost();
+        NetworkManager.Instance?.OnStart();
     }
 
     [Button]
-    public void StartServer()
-    {
-        RebuildNetworkManager();
-        NetworkManager.Instance.StartServer();
-    }
-    
+    public void StartServer() => NetworkManager.Instance.StartServer();
+
     [Button]
-    public void StartClient()
-    {
-        RebuildNetworkManager();
-        NetworkManager.Instance.StartClient();
-    }
-    
+    public void StartClient() => NetworkManager.Instance.StartClient();
+
     [Button]
-    public void StopServer() => NetworkManager.Instance.Server.Stop();
+    public void StopServer() => NetworkManager.Instance.Server?.Stop();
     [Button]
-    public void StopClient() => NetworkManager.Instance.Client.Disconnect();
-    
+    public void StopClient() => NetworkManager.Instance.Client?.Disconnect();
 }

@@ -8,33 +8,35 @@ This is a quick map of the public types in the `Reflect` namespace and what they
 
 A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. `StartHost()` runs both server and client in one process, but is marked obsolete because gameplay scripts may need changes to support shared objects.
 
-Configuration (address, port, prefabs, etc.) is pushed in by `NetworkManagerUI`. The plugin itself initializes during `Initialize()` and ticks via `Scripting.Update`.
+Configuration (address, port, prefabs, etc.) comes from the `ReflectSettings` asset, re-read on every start. The plugin itself initializes during `Initialize()` and ticks via `Scripting.Update`.
 
 - `static NetworkManager Instance`
-- `Prefab[] SpawnablePrefabs`
-- `float SyncInterval` (default 0.1)
-- `string Address` (default `127.0.0.1`)
-- `ushort Port` (default 7777)
-- `ushort MaxConnections` (default 16)
+- `ReflectSettings Settings`
 - `event Action OnServerStarted`
 - `static bool IsServer`, `static bool IsClient`, `static bool IsHost`
 - `NetworkServer Server`, `NetworkClient Client`
 - `void StartServer()`, `void StartClient()`, `void StartHost()` (deprecated)
-- `void RebuildPrefabRegistry()`, `void RebuildTransport()`
+- `void ReloadSettings()` (no-op while a server or client is active)
 - `void OnStart()` (reads command-line args for `server` / `client`)
 
 ### NetworkManagerUI
 
-A Flax `Script` you place on a scene actor. It exposes the network settings in the inspector and provides editor buttons for starting and stopping the server, client, and host. After a short delay (0.25s) it pushes its settings into `NetworkManager` and calls `OnStart()`.
+A Flax `Script` you place in the scene a process starts in. After a short delay (0.25s) it calls `NetworkManager.OnStart()`, and it provides editor buttons for starting and stopping the server, client, and host.
+
+- `[ShowInEditor] bool Initialized`, `bool IsHost`, `bool IsServer`, `bool IsClient`
+- `[Button] void StartHost()` (deprecated), `void StartServer()`, `void StartClient()`
+- `[Button] void StopServer()`, `void StopClient()`
+
+### ReflectSettings
+
+Project-wide config, stored as a Json asset and registered under Game Settings > Custom Settings with the key `Reflect` (`ReflectSettings.Key`).
 
 - `Prefab[] SpawnablePrefabs`
 - `float SyncInterval` (default 0.1)
 - `string Address` (default `127.0.0.1`)
 - `ushort Port` (default 7777)
 - `ushort MaxConnections` (default 16)
-- `[ShowInEditor] bool Initialized`, `bool IsHost`, `bool IsServer`, `bool IsClient`
-- `[Button] void StartHost()` (deprecated), `void StartServer()`, `void StartClient()`
-- `[Button] void StopServer()`, `void StopClient()`
+- `static ReflectSettings Load()` (defaults plus a warning when no asset is registered)
 
 ### NetworkServer
 
@@ -45,11 +47,14 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `IInterestManagement Interest` (default `GlobalInterest`)
 - `float RebuildInterval` (default 1.0, seconds between observer rebuilds)
 - `bool Active`
+- `SceneReference ActiveScene`, `bool IsLoadingScene`
+- `void ChangeScene(SceneReference scene)`
+- `event Action<SceneReference> OnSceneLoaded`
 - `event Action<NetworkConnection> OnPlayerConnected`
-- `event Action<NetworkConnection> OnPlayerLoaded`
+- `event Action<NetworkConnection> OnPlayerLoaded` (once per connection per scene)
 - `event Action<NetworkConnection?> OnPlayerDisconnected`
 - `void Start()`, `void Stop()`
-- `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)`
+- `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)` (fails while loading a scene)
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`
 - `void SendToConnection(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType)`
@@ -63,9 +68,11 @@ Spawning and despawning now go through the interest management system. When an o
 Created by `NetworkManager`. Manages spawned objects and incoming messages on the client.
 
 - `Dictionary<uint, NetworkIdentity> Spawned` (in host mode, returns the server's `Spawned` dict)
-- `Dictionary<ulong, NetworkIdentity> SceneObjects`
+- `Dictionary<Guid, NetworkIdentity> SceneObjects`
 - `bool Active`
-- `event Action OnReady`
+- `SceneReference ActiveScene`, `bool IsLoadingScene`
+- `event Action<SceneReference> OnSceneChanging`
+- `event Action OnReady` (once per scene)
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
 
@@ -76,7 +83,8 @@ In host mode, spawn messages update local ownership without creating duplicate a
 A Flax `Script` placed on the root actor of any networked object. Holds the network ID and references to its `NetworkScript` components.
 
 - `uint NetId` (internal set)
-- `ulong SceneId`
+- `Guid SceneId` (internal set)
+- `bool IsSceneObject`
 - `Guid AssetId`
 - `static bool IsServer`, `static bool IsClient`
 - `NetworkConnection Owner` (internal set)
