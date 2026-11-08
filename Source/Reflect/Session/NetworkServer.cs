@@ -85,21 +85,13 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     public void Stop()
     {
         if (!Active) return;
-        var hostClient = NetworkManager.IsHost && NetworkManager.Instance.Server == this ? NetworkManager.Instance.Client : null;
         Active = false;
         transport.OnServerConnected -= OnConnected;
         transport.OnServerData -= OnData;
         transport.OnServerDisconnected -= OnDisconnected;
         Level.SceneLoaded -= OnLevelSceneLoaded;
-        try
-        {
-            hostClient?.Disconnect();
-        }
-        finally
-        {
-            try { transport.ServerStop(); }
-            finally { ClearSession(); }
-        }
+        try { transport.ServerStop(); }
+        finally { ClearSession(); }
     }
 
     private void ClearSession()

@@ -116,13 +116,10 @@ public class NetworkTransform : NetworkScript
    private void CmdMove(Float3 pos, Quaternion rot)
    {
       if (!ClientAuthority) return;
-      if (!IsLocalOwner)
-      {
-         // TODO: Server validation?
-         Actor.Position = pos;
-         Actor.Orientation = rot;
-      }
-      
+      // TODO: Server validation?
+      Actor.Position = pos;
+      Actor.Orientation = rot;
+
       SendClientRpc(nameof(RpcMove), pos, rot, false);
    }
 
@@ -139,7 +136,7 @@ public class NetworkTransform : NetworkScript
          return;
       }
       
-      if (IsLocalOwner || (!ClientAuthority && IsServer)) return;
+      if (IsLocalOwner) return;
 
       if (_buffer.Count == 0 || Time.GameTime - _buffer[^1].Time > InterpolationDelay * 2f)
       {

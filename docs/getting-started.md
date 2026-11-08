@@ -124,10 +124,6 @@ YourGame.exe server
 YourGame.exe client
 ```
 
-### Host mode
-
-`StartHost()` runs both server and client in one process. It is marked obsolete because gameplay scripts may need changes to support the shared server/client objects. Prefer the toolbar workflow for local server/client testing. See [Architecture](/architecture#host-mode) for how host mode shares objects and routes RPCs.
-
 ## Next steps
 
 From here, read [Architecture](/architecture) to understand the layers, then dig into [SyncVars](/syncvars) and the [RPC System](/rpc-system) for the details.

@@ -64,7 +64,7 @@ public class PlayerHealth : NetworkScript
 }
 ```
 
-For packaged builds, start the server or client with command-line arguments (`server` / `client`). The `NetworkManagerUI` inspector buttons start each role in the current process. `StartHost()` is deprecated because gameplay scripts may need changes to support its shared server/client objects. See [Getting started](https://bill3621.github.io/Reflect/getting-started) for the editor workflow.
+For packaged builds, start the server or client with command-line arguments (`server` / `client`). The `NetworkManagerUI` inspector buttons start each role in the current process. A process runs either the server or the client, never both. See [Getting started](https://bill3621.github.io/Reflect/getting-started) for the editor workflow.
 
 ## Architecture
 

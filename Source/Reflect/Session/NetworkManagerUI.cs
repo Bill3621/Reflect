@@ -1,5 +1,4 @@
-﻿using System;
-using FlaxEngine;
+﻿using FlaxEngine;
 
 namespace Reflect;
 

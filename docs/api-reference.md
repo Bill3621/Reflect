@@ -6,25 +6,25 @@ This is a quick map of the public types in the `Reflect` namespace and what they
 
 ### NetworkManager
 
-A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. `StartHost()` runs both server and client in one process, but is marked obsolete because gameplay scripts may need changes to support shared objects.
+A Flax `GamePlugin` that owns the transport, server, and client. Holds a static `Instance`. A process runs either the server or the client: starting one while the other is active logs a warning and does nothing.
 
 Configuration (address, port, prefabs, etc.) comes from the `ReflectSettings` asset, re-read on every start. The plugin itself initializes during `Initialize()` and ticks via `Scripting.Update`.
 
 - `static NetworkManager Instance`
 - `ReflectSettings Settings`
 - `event Action OnServerStarted`
-- `static bool IsServer`, `static bool IsClient`, `static bool IsHost`
+- `static bool IsServer`, `static bool IsClient`
 - `NetworkServer Server`, `NetworkClient Client`
-- `void StartServer()`, `void StartClient()`, `void StartHost()` (deprecated)
+- `void StartServer()`, `void StartClient()`
 - `void ReloadSettings()` (no-op while a server or client is active)
 - `void OnStart()` (reads command-line args for `server` / `client`)
 
 ### NetworkManagerUI
 
-A Flax `Script` you place in the scene a process starts in. After a short delay (0.25s) it calls `NetworkManager.OnStart()`, and it provides editor buttons for starting and stopping the server, client, and host.
+A Flax `Script` you place in the scene a process starts in. After a short delay (0.25s) it calls `NetworkManager.OnStart()`, and it provides editor buttons for starting and stopping the server and client.
 
-- `[ShowInEditor] bool Initialized`, `bool IsHost`, `bool IsServer`, `bool IsClient`
-- `[Button] void StartHost()` (deprecated), `void StartServer()`, `void StartClient()`
+- `[ShowInEditor] bool Initialized`, `bool IsServer`, `bool IsClient`
+- `[Button] void StartServer()`, `void StartClient()`
 - `[Button] void StopServer()`, `void StopClient()`
 
 ### ReflectSettings
@@ -67,7 +67,7 @@ Spawning and despawning now go through the interest management system. When an o
 
 Created by `NetworkManager`. Manages spawned objects and incoming messages on the client.
 
-- `Dictionary<uint, NetworkIdentity> Spawned` (in host mode, returns the server's `Spawned` dict)
+- `Dictionary<uint, NetworkIdentity> Spawned`
 - `Dictionary<Guid, NetworkIdentity> SceneObjects`
 - `bool Active`
 - `SceneReference ActiveScene`, `bool IsLoadingScene`
@@ -75,8 +75,6 @@ Created by `NetworkManager`. Manages spawned objects and incoming messages on th
 - `event Action OnReady` (once per scene)
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
-
-In host mode, spawn messages update local ownership without creating duplicate actors. Despawn and state messages do not modify the shared server objects. RPCs still flow through normally.
 
 ### NetworkIdentity
 

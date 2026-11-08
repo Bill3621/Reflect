@@ -73,7 +73,7 @@ This split exists because spawning the relevant world into a new client takes a 
 
 Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
 
-Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. A host client disconnect does not despawn the server's shared world; stopping the host server also disconnects its local client. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing.
+Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing.
 
 `ReloadSettings()` keeps the current transport while either endpoint is active. Address, port, and connection-limit changes take effect after both endpoints stop and the transport is rebuilt.
 
@@ -86,8 +86,6 @@ Server and clients load in parallel. When the server's `Level.SceneLoaded` fires
 Late joiners take the same path: `OnConnected` sends the current scene. The load id guards against a `SceneReady` from an older load. Net ids are never reused across scenes, so a Command still in flight for an old object misses `Spawned` and is dropped. While a connection is loading, the server sends it no spawns, state, or RPCs, and the client ignores anything except `LoadScene`. `Spawn()` is rejected while the server itself is loading.
 
 Scene objects are matched across peers by `NetworkIdentity.SceneId`, which is the identity script's own object ID from the scene file. There is nothing to set by hand. Prefabs spawned at runtime get random IDs and an empty `SceneId`.
-
-In host mode the host client shares the server's world, so it acks `LoadScene` right away and lets the server's load drive both.
 
 ## Interest management
 
@@ -106,18 +104,6 @@ Reflect ships three implementations:
 Clients destroy prefab actors when hidden, but deactivate scene actors and keep their scene registrations. When a scene actor becomes visible again, the client applies the spawn transform and full state to the same actor. `NetworkTransform` clears its old interpolation snapshots on each network spawn.
 
 The server rebuilds observers on three triggers: when an object spawns or despawns (calls `RebuildObservers()` directly), when a new connection is pending (triggered at the top of `Update()`), and on a timer (`RebuildInterval`, default 1 second) to keep visibility current as objects move around the world.
-
-## Host mode
-
-`StartHost()` starts the server and client in the same process. It is marked obsolete because gameplay scripts may need changes to handle shared server/client objects. The editor toolbar's [separate-server workflow](/getting-started#in-the-editor) avoids shared objects and is the preferred way to test both roles locally.
-
-The naive approach (just running both) has a problem: the server creates objects in the scene, then sends spawn messages to the client, which creates the same objects again. Two copies of everything. Reflect avoids this by sharing state.
-
-A client that connects while the local server is active shares that server's `Spawned` dictionary for the connection's lifetime. It does not create or destroy duplicate actors from spawn/despawn messages, and it skips state deserialization because the server's SyncVars are already current in shared memory. It still reads the ownership flag from spawn messages delivered to the local client.
-
-RPCs are the exception. They still go through the transport and arrive via the client's message handler, because RPCs are one-shot events rather than state. The host's commands travel to the server, and the server's ClientRpcs travel back to the host's client, same as any other client.
-
-The host client sets `IsOwnedLocally` from the spawn messages it receives. Sending a spawn to a remote observer does not change the shared identity's local ownership. `NetworkTransform` checks `IsLocalOwner` before applying a `CmdMove` on the host because the owning host client already moved that shared actor.
 
 ## SyncVar dirty tracking
 

@@ -15,7 +15,6 @@ public class NetworkManager : GamePlugin
 
     public static bool IsServer => Instance?.Server is { Active: true };
     public static bool IsClient => Instance?.Client is { Active: true };
-    public static bool IsHost => IsServer && IsClient;
 
     public NetworkServer Server { get; private set; }
 
@@ -77,6 +76,11 @@ public class NetworkManager : GamePlugin
     public void StartServer()
     {
         if (Server is { Active: true }) return;
+        if (IsClient)
+        {
+            Debug.LogWarning("Cannot start a server while a client is running in this process.");
+            return;
+        }
         ReloadSettings();
         _accum = 0;
         Server = new NetworkServer(_transport, _registry)
@@ -91,6 +95,11 @@ public class NetworkManager : GamePlugin
     public void StartClient()
     {
         if (Client is { Active: true }) return;
+        if (IsServer)
+        {
+            Debug.LogWarning("Cannot start a client while a server is running in this process.");
+            return;
+        }
         ReloadSettings();
         Client = new NetworkClient(_transport, _registry);
         Client.Connect();
