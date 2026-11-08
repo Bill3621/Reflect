@@ -56,9 +56,28 @@ Three protected methods on `NetworkScript` do the sending. Each takes the method
 - `SendClientRpc(string methodName, params object[] args)` sends a `[ClientRpc]` from the server to all observing clients.
 - `SendTargetRpc(NetworkConnection target, string methodName, params object[] args)` sends a `[TargetRpc]` from the server to one connection.
 
-Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, and `NetworkRef`. Passing a type with no registered serializer throws at send time.
+Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, and `NetworkRef`. Enums register automatically, including `[Flags]` enums and all C# enum backing types. Passing another type with no registered serializer throws at send time.
 
 `SendCommand` requires an active client. The other two require an active server. If the precondition is not met, Reflect logs an error and returns.
+
+## Enum arguments
+
+Declare the enum as the RPC parameter type and pass its value directly:
+
+```csharp
+public enum Team : byte { Red = 0, Blue = 1 }
+
+public void RequestTeam(Team team) => SendCommand(nameof(CmdSelectTeam), team);
+
+[Command]
+private void CmdSelectTeam(Team team)
+{
+    if (team != Team.Red && team != Team.Blue) return;
+    // Apply the team choice on the server.
+}
+```
+
+Reflect sends the enum's numeric value. Both peers must use the same backing type and numeric assignments. Deserialization does not reject undefined values, so validate client-supplied choices in the command body. A `[Flags]` enum accepts combinations, but gameplay code must still reject bits it does not allow.
 
 ## A complete flow
 

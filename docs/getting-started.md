@@ -60,7 +60,7 @@ Do the same for your editor target (`GameProjectEditorTarget`). After that, rege
 - `SyncInterval` controls how often the server pushes SyncVar deltas, in seconds (default 0.1).
 - `SpawnablePrefabs` is an array of prefabs that can be spawned over the network. Each prefab must have a `NetworkIdentity` component on its root.
 
-`NetworkManagerUI` waits a short delay after the scene loads (0.25s), pushes its settings into the `NetworkManager` singleton, then calls `OnStart()` which checks the command line for `server` or `client`. You can also use the `Start Server`, `Start Client`, and `Start Host` buttons on the `NetworkManagerUI` actor in the inspector.
+`NetworkManagerUI` waits a short delay after the scene loads (0.25s), pushes its settings into the `NetworkManager` singleton, then calls `OnStart()` which checks the command line for `server` or `client`. The inspector's `Start Server` and `Start Client` buttons start those roles in the current process. The editor toolbar's `Start Server` button launches a separate server process, as described below.
 
 ## Write a NetworkScript
 
@@ -98,7 +98,21 @@ The client calls `RequestRespawn`, which sends a `[Command]` to the server. The 
 
 ## Run the server and client
 
-You can launch each role from the command line. Reflect reads `server` and `client` as arguments in `NetworkManager.OnStart`:
+### In the editor
+
+1. Add `NetworkManagerUI` to the scene and configure its endpoint and spawnable prefabs. Use `127.0.0.1` for the local server, with the same port on both sides.
+2. Save the scene and enter Play mode.
+3. Click `Start Server` in the editor's top toolbar. The button is enabled only during Play mode.
+
+Reflect launches another Flax Editor process with the same project and the first loaded scene. That process runs headless, with rendering and audio disabled, skips script compilation, and passes `server` to `NetworkManager.OnStart()`. It loads the saved scene asset rather than copying the editor's live scene, so save your changes before starting.
+
+Once the server signals that startup is complete, Reflect calls `StartClient()` on the first `NetworkManagerUI` in the editor scene. An already-active client is left alone. Server logs appear in the editor Output window with a `[Server]` prefix.
+
+The toolbar button changes to `Stop Server`. Clicking it, leaving Play mode, or unloading the editor plugin stops the child process and disconnects the client that Reflect auto-started. If the server exits on its own, Reflect also cleans up that client and resets the button.
+
+### From the command line
+
+You can launch each role in a packaged game. Keep `NetworkManagerUI` in the startup scene so it applies settings and calls `NetworkManager.OnStart()`:
 
 ```bash
 # Start a server
@@ -108,9 +122,9 @@ YourGame.exe server
 YourGame.exe client
 ```
 
-For testing in the editor, select the `NetworkManagerUI` actor and use the `Start Server`, `Start Client`, or `Start Host` buttons. `StartHost` runs both server and client in one process, which is useful for solo testing or listen-server setups. In host mode, the client shares the server's spawned objects instead of creating its own copies, so you will not see duplicates.
+### Host mode
 
-See [Architecture](/architecture) for details on how host mode works under the hood.
+`StartHost()` runs both server and client in one process. It is marked obsolete because gameplay scripts may need changes to support the shared server/client objects. Prefer the toolbar workflow for local server/client testing. See [Architecture](/architecture#host-mode) for how host mode shares objects and routes RPCs.
 
 ## Next steps
 

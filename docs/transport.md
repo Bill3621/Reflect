@@ -71,7 +71,7 @@ var config = new NetworkConfig
 
 ### Message pool lifecycle
 
-Flax `NetworkPeer` uses a pool of `NetworkMessage` objects. When data arrives, `Poll` pops events off the peer and reads the message payload. It returns the buffer with `peer.RecycleMessage(evt.Message)` in a `finally` block, including when a packet is malformed or a message handler throws. Handler errors are logged without stopping the remaining message events.
+Flax `NetworkPeer` uses a pool of `NetworkMessage` objects. When data arrives, `Poll` pops events off the peer and reads the message payload. It returns the buffer with `peer.RecycleMessage(evt.Message)` in a `finally` block, including when a packet is malformed or a message handler throws. If the handler shuts down the peer, `Poll` skips recycling into that peer's destroyed pool and stops polling it. Handler errors are logged without stopping events for peers that remain active.
 
 This matters if you write your own transport or touch the peer directly. Messages are pooled objects, not owned by you. You must recycle them when you are done or the pool runs dry and the peer stops delivering.
 
