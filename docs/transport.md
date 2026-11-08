@@ -16,6 +16,7 @@ public interface ITransport
     void ServerStart();
     void ServerSend(int connectionId, ArraySegment<byte> data,
         NetworkChannelType channelType = NetworkChannelType.ReliableOrdered);
+    void ServerDisconnect(int connectionId);
     void ServerStop();
 
     // Client

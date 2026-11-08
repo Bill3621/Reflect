@@ -28,6 +28,8 @@ public interface ITransport
     event Action<int> OnServerDisconnected;
     void ServerStart();
     void ServerSend(int connectionId, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered);
+    /// <summary>Drops one connection. Does not raise <see cref="OnServerDisconnected"/>; the caller cleans up its own state.</summary>
+    void ServerDisconnect(int connectionId);
     void ServerStop();
     
     // CLIENT
@@ -73,6 +75,15 @@ public sealed class LoopbackTransport : ITransport
     {
         if (_serverUp && _clientUp && connectionId == ClientConnId)
             _toClient.Enqueue(data.ToArray());
+    }
+
+    public void ServerDisconnect(int connectionId)
+    {
+        if (!_clientUp || connectionId != ClientConnId) return;
+        _clientUp = false;
+        _toServer.Clear();
+        _toClient.Clear();
+        OnClientDisconnected?.Invoke();
     }
 
     public void ClientConnect()

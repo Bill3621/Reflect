@@ -196,10 +196,21 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         OnPlayerConnected?.Invoke(conn);
     }
 
+    /// <summary>
+    /// Disconnects one client from the server. Cleanup and <see cref="OnPlayerDisconnected"/> run immediately,
+    /// the same as when the client leaves on its own.
+    /// </summary>
+    public void Kick(NetworkConnection conn)
+    {
+        if (!Active || conn == null || !Connections.ContainsKey(conn.Id)) return;
+        transport.ServerDisconnect(conn.Id);
+        OnDisconnected(conn.Id);
+    }
+
     private void OnDisconnected(int connId)
     {
-        Debug.Log($"Client disconnected with connId={connId}");
         if (!Connections.Remove(connId, out var conn)) return;
+        Debug.Log($"Client disconnected with connId={connId}");
         if (conn.OwnedPlayer != null) Despawn(conn.OwnedPlayer);
         conn.Observing.Clear();
         conn.OwnedPlayer = null;

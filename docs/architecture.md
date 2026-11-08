@@ -39,7 +39,7 @@ The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkI
 
 ## The transport abstraction
 
-`ITransport` is the boundary between Reflect and the wire. It is a small interface with server and client halves. Server methods are `ServerStart`, `ServerSend(connectionId, data, channelType)`, `ServerStop`, plus events for connect, data, and disconnect. Client methods mirror that with `ClientConnect`, `ClientSend`, `ClientDisconnect`.
+`ITransport` is the boundary between Reflect and the wire. It is a small interface with server and client halves. Server methods are `ServerStart`, `ServerSend(connectionId, data, channelType)`, `ServerDisconnect(connectionId)`, `ServerStop`, plus events for connect, data, and disconnect. Client methods mirror that with `ClientConnect`, `ClientSend`, `ClientDisconnect`.
 
 Reflect ships two implementations. `FlaxTransport` wraps Flax's `NetworkPeer` and `ENetDriver` for real network play. `LoopbackTransport` keeps everything in-process with a pair of queues, which is useful for unit tests and local prototyping. `NetworkManager` constructs a `FlaxTransport` for you, but you can hand either implementation to `NetworkServer` or `NetworkClient` directly.
 

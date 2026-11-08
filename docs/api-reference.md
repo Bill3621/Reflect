@@ -47,6 +47,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `event Action<NetworkConnection> OnPlayerLoaded` (once per connection per scene)
 - `event Action<NetworkConnection?> OnPlayerDisconnected`
 - `void Start()`, `void Stop()`
+- `void Kick(NetworkConnection conn)` (runs disconnect cleanup and `OnPlayerDisconnected` immediately)
 - `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)` (fails while loading a scene)
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`

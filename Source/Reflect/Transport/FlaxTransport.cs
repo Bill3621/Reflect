@@ -45,6 +45,13 @@ public sealed class FlaxTransport : ITransport
             new FlaxEngine.Networking.NetworkConnection { ConnectionId = (uint)connectionId });
     }
 
+    public void ServerDisconnect(int connectionId)
+    {
+        // Removing first means a late Disconnected event from the peer is not reported again.
+        if (_serverPeer == null || !_serverConnections.Remove((uint)connectionId)) return;
+        _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection { ConnectionId = (uint)connectionId });
+    }
+
     public void ServerStop()
     {
         if (_serverPeer == null) return;
@@ -112,8 +119,8 @@ public sealed class FlaxTransport : ITransport
                 case NetworkEventType.Timeout:
                     if (isServer)
                     {
-                        _serverConnections.Remove(evt.Sender.ConnectionId);
-                        OnServerDisconnected?.Invoke((int)evt.Sender.ConnectionId);
+                        if (_serverConnections.Remove(evt.Sender.ConnectionId))
+                            OnServerDisconnected?.Invoke((int)evt.Sender.ConnectionId);
                     }
                     else
                         OnClientDisconnected?.Invoke();
