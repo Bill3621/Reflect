@@ -48,8 +48,9 @@ public class NetworkManager : GamePlugin
         if (args.Contains("server"))
         {
             StartServer();
-            Console.Error.WriteLine("REFLECT_SERVER_READY");
-            Console.Error.Flush();
+            if (!ReflectPlugin.IsEditorServer || !IsServer) return;
+            Console.WriteLine("REFLECT_SERVER_READY");
+            Console.Out.Flush();
         } else if (args.Contains("client"))
         {
             StartClient();

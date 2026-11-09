@@ -207,11 +207,10 @@ public class ReflectEditorPlugin : EditorPlugin
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true,
             };
 
             settings.ArgumentList.Add($"-project={project}");
-            settings.ArgumentList.Add("-std");
+            settings.ArgumentList.Add(ReflectPlugin.EditorServerArgument);
             settings.ArgumentList.Add("-headless");
             settings.ArgumentList.Add("-null");
             settings.ArgumentList.Add("-mute");
@@ -231,8 +230,6 @@ public class ReflectEditorPlugin : EditorPlugin
 
             _serverProcess.OutputDataReceived += OnServerOutput;
             _serverProcess.BeginOutputReadLine();
-            _serverProcess.ErrorDataReceived += OnServerErrorOutput;
-            _serverProcess.BeginErrorReadLine();
             Debug.Log($"Started server process (PID {_serverProcess.Id})");
         }
         catch (Exception ex)
@@ -274,7 +271,6 @@ public class ReflectEditorPlugin : EditorPlugin
             if (process != null)
             {
                 process.OutputDataReceived -= OnServerOutput;
-                process.ErrorDataReceived -= OnServerErrorOutput;
                 process.Dispose();
             }
             client?.Disconnect();
@@ -282,23 +278,21 @@ public class ReflectEditorPlugin : EditorPlugin
         }
     }
     
-    private void OnServerErrorOutput(object sender, DataReceivedEventArgs e)
-    {
-        if (e.Data?.Trim() != "REFLECT_SERVER_READY")
-            return;
-
-        lock (_serverLogs)
-        {
-            // Ignore delayed signals from a stopped process.
-            if (sender != _serverProcess) return;
-            _readyServer = (Process)sender;
-            _serverLogs.Enqueue((LogType.Info, "Server ready signal received."));
-        }
-    }
-    
     private void OnServerOutput(object sender, DataReceivedEventArgs e)
     {
         const string prefix = "REFLECT_LOG:";
+
+        if (e.Data?.Trim() == "REFLECT_SERVER_READY")
+        {
+            lock (_serverLogs)
+            {
+                // Ignore delayed signals from a stopped process.
+                if (sender != _serverProcess) return;
+                _readyServer = (Process)sender;
+                _serverLogs.Enqueue((LogType.Info, "Server ready signal received."));
+            }
+            return;
+        }
 
         if (e.Data == null || !e.Data.StartsWith(prefix))
             return;

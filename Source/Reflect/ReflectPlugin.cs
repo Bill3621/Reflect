@@ -9,6 +9,9 @@ namespace Reflect;
 /// </summary>
 public class ReflectPlugin : GamePlugin
 {
+    internal const string EditorServerArgument = "-reflect-editor-server";
+    internal static bool IsEditorServer => Engine.IsHeadless && Engine.CommandLine.Contains(EditorServerArgument);
+
     private bool _forwardLogs;
     
     public ReflectPlugin()
@@ -33,7 +36,7 @@ public class ReflectPlugin : GamePlugin
         base.Initialize();
         Debug.Log("[Reflect] Networking plugin initialized.");
 
-        if (!Engine.IsHeadless || !Engine.CommandLine.Contains("server")) return;
+        if (!IsEditorServer) return;
         
         Debug.Logger.LogHandler.SendLog += ForwardLog;
         Debug.Logger.LogHandler.SendExceptionLog += ForwardException;
