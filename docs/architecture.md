@@ -1,6 +1,6 @@
 # Architecture
 
-Reflect is organized in three layers. Your game code sits on top, the Reflect core sits in the middle, and Flax's ENet transport sits at the bottom. This page walks through what each layer does and how data moves between them.
+Reflect has three layers. Your game code sits on top, Reflect in the middle, and Flax's ENet transport at the bottom.
 
 ## The layers
 
@@ -13,8 +13,7 @@ Reflect is organized in three layers. Your game code sits on top, the Reflect co
 │  ┌─────────────┐  ┌────────────────────┐    │
 │  │  Session     │  │    Components      │    │
 │  │  Manager     │  │  NetworkTransform  │    │
-│  │  ManagerUI   │  └────────────────────┘    │
-│  │  Server      │                            │
+│  │  Server      │  └────────────────────┘    │
 │  │  Client      │  ┌────────────────────┐    │
 │  │  Identity    │  │      Transport      │    │
 │  │  Script      │  │  ITransport (iface) │    │
@@ -43,7 +42,7 @@ The Session layer (`NetworkManager`, `NetworkServer`, `NetworkClient`, `NetworkI
 
 Reflect ships two implementations. `FlaxTransport` wraps Flax's `NetworkPeer` and `ENetDriver` for real network play. `LoopbackTransport` keeps everything in-process with a pair of queues, which is useful for unit tests and local prototyping. `NetworkManager` constructs a `FlaxTransport` for you, but you can hand either implementation to `NetworkServer` or `NetworkClient` directly.
 
-See the [Transport Layer](/transport) page for the full interface and configuration details.
+See the [Transport layer](/transport) page for the full interface and configuration details.
 
 ## The message pipeline
 
@@ -51,7 +50,7 @@ Every piece of data Reflect sends goes through the same pipeline. A sender build
 
 The on-wire format for a single message is a `MsgType` byte, a 16-bit little-endian body length, then the body. `NetworkWriter.BeginMessage` and `FinishMessage` handle the length back-patching. Each receive handler gets a reader bounded to that message's body, so it cannot consume bytes from the next message. Invalid lengths, truncated values, and overflowing varints cause the session to log a warning and drop the rest of that packet.
 
-Transport implementations are free to frame the payload however they like. `FlaxTransport` writes a 4-byte length prefix on top (see [Transport Layer](/transport)) because that is what Flax's `NetworkMessage` expects. Reflect's own framing sits inside that payload.
+Transport implementations are free to frame the payload however they like. `FlaxTransport` writes a 4-byte length prefix on top (see [Transport layer](/transport)) because that is what Flax's `NetworkMessage` expects. Reflect's own framing sits inside that payload.
 
 ## RPC dispatch
 
@@ -83,7 +82,7 @@ One scene is active at a time, and the server decides which. `Server.ChangeScene
 
 Server and clients load in parallel. When the server's `Level.SceneLoaded` fires it registers the new scene objects and raises `OnSceneLoaded`. A connection moves on only once both its `SceneReady` for the current load id has arrived and the server has finished loading, so it does not matter which side is faster. From there it follows the normal join path, and `OnPlayerLoaded` fires again. A per-scene player spawner just listens to `OnPlayerLoaded` while its scene is loaded.
 
-Late joiners take the same path: `OnConnected` sends the current scene. The load id guards against a `SceneReady` from an older load. Net ids are never reused across scenes, so a Command still in flight for an old object misses `Spawned` and is dropped. While a connection is loading, the server sends it no spawns, state, or RPCs, and the client ignores anything except `LoadScene`. `Spawn()` is rejected while the server itself is loading.
+Late joiners take the same path, since `OnConnected` sends the current scene. The load id guards against a `SceneReady` from an older load. Net ids are never reused across scenes, so a Command still in flight for an old object misses `Spawned` and is dropped. While a connection is loading, the server sends it no spawns, state, or RPCs, and the client ignores anything except `LoadScene`. `Spawn()` is rejected while the server itself is loading.
 
 Scene objects are matched across peers by `NetworkIdentity.SceneId`, which is the identity script's own object ID from the scene file. There is nothing to set by hand. Prefabs spawned at runtime get random IDs and an empty `SceneId`.
 
@@ -127,7 +126,7 @@ A teleport path clears the snapshot buffer and snaps the object directly, which 
 
 ## Referencing objects across the network
 
-Sometimes a script needs to point at another networked object. Maybe a projectile tracks its target, or a player holds a reference to the flag they are carrying. You cannot send a `NetworkIdentity` reference over the wire because the object on the other side lives at a different memory address (or may not exist yet).
+Sometimes a script needs to point at another networked object, like a projectile tracking its target or a player carrying a flag. You cannot send a `NetworkIdentity` reference over the wire because the object on the other side lives at a different memory address (or may not exist yet).
 
 `NetworkRef` solves this. It is a small readonly struct that stores a `NetId` and resolves to the live `NetworkIdentity` on demand. You create one from any `NetworkIdentity` or `NetworkScript` via the implicit conversion operators, pass it as an RPC argument or store it in a SyncVar, and call `Resolve()` on the receiving side to get the real object back.
 
@@ -152,4 +151,4 @@ Each message picks a `NetworkChannelType`. This is a Flax enum with four values:
 - `Unreliable` drops messages that do not arrive. No ordering or retransmission.
 - `UnreliableOrdered` drops lost messages but orders the ones that do arrive by sequence number.
 
-The rule of thumb is simple. Game state that must arrive goes reliable ordered. High-frequency data where the latest value is all that matters (position, rotation, voice) goes unreliable.
+Game state that must arrive goes reliable ordered. High-frequency data where the latest value is all that matters (position, rotation, voice) goes unreliable.

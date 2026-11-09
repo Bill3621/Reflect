@@ -1,4 +1,4 @@
-# Getting Started
+# Getting started
 
 Reflect is a Flax Engine plugin written in C#. It targets .NET 10 and Flax Engine 1.12. There is no native code to compile.
 
@@ -96,7 +96,7 @@ public class PlayerHealth : NetworkScript
 }
 ```
 
-The client calls `RequestRespawn`, which sends a `[Command]` to the server. The server validates it (authority is checked automatically), resets health, and broadcasts a `[ClientRpc]` to every client so they all see the respawn at the same time. See the [RPC System](/rpc-system) page for the full picture.
+The client calls `RequestRespawn`, which sends a `[Command]` to the server. The server checks authority, resets health, and broadcasts a `[ClientRpc]` to every client so they all see the respawn at the same time. See the [RPC system](/rpc-system) page.
 
 ## Run the server and client
 
@@ -126,4 +126,4 @@ YourGame.exe client
 
 ## Next steps
 
-From here, read [Architecture](/architecture) to understand the layers, then dig into [SyncVars](/syncvars) and the [RPC System](/rpc-system) for the details.
+From here, read [Architecture](/architecture) to understand the layers, then [SyncVars](/syncvars) and the [RPC system](/rpc-system).

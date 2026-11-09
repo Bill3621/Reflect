@@ -5,7 +5,7 @@ using FlaxEngine;
 namespace Reflect;
 
 /// <summary>
-/// Reflect — a lightweight, Mirror-inspired networking framework for Flax Engine.
+/// Client-server networking for Flax Engine, modeled on Unity's Mirror.
 /// </summary>
 public class ReflectPlugin : GamePlugin
 {

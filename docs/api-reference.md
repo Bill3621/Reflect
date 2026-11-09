@@ -1,6 +1,6 @@
-# API Reference
+# API reference
 
-This is a quick map of the public types in the `Reflect` namespace and what they expose. All types are in C# and target .NET 10.
+The public types in the `Reflect` namespace and what they expose.
 
 ## Session
 
@@ -56,7 +56,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `void RebuildObservers()`
 - `void Update()`
 
-Spawning and despawning now go through the interest management system. When an object spawns, the server calls `RebuildObservers()`, which asks the current `IInterestManagement` implementation which objects each connection should see, then sends spawn messages only to connections that newly need to see an object and despawn (hide) messages to connections that should stop seeing it. `Update()` periodically calls `RebuildObservers()` (every `RebuildInterval` seconds) to keep visibility current as objects move.
+Spawning and despawning go through the interest management system. When an object spawns, the server calls `RebuildObservers()`, which asks the current `IInterestManagement` implementation which objects each connection should see, then sends spawn messages to connections that should start seeing an object and despawn messages to connections that should stop. `Update()` periodically calls `RebuildObservers()` (every `RebuildInterval` seconds) to keep visibility current as objects move.
 
 ### NetworkClient
 
@@ -126,7 +126,7 @@ Static cache that discovers RPC methods by reflection and assigns stable IDs.
 
 `RpcKind` enum: `Command`, `ClientRpc`, `TargetRpc`.
 
-## Interest Management
+## Interest management
 
 ### IInterestManagement
 
@@ -306,13 +306,13 @@ Helpers for the message header byte.
 
 An editor-only Flax `EditorPlugin` that adds a `Start Server` / `Stop Server` toolbar button during Play mode. It launches a separate headless editor process using the same project and first loaded scene, forwards its logs to the editor, and auto-starts the local client after the server is ready. Stopping the child process or ending Play mode disconnects the auto-started client. An unexpected process exit uses the same cleanup.
 
-The toolbar button does not call the inspector's `StartServer()` in the current process. See [Getting started](/getting-started#in-the-editor) for setup and saved-scene requirements.
+The button never calls `NetworkManager.StartServer()` in the editor process. See [Getting started](/getting-started#in-the-editor) for setup and saved-scene requirements.
 
 ## Transport
 
 ### ITransport
 
-The transport contract. See the [Transport Layer](/transport) page for the full definition.
+The transport contract. See the [Transport layer](/transport) page for the full definition.
 
 ### FlaxTransport
 

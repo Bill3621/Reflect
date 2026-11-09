@@ -32,17 +32,17 @@ export default defineConfig({
       {
         text: 'Guide',
         items: [
-          { text: 'Getting Started', link: '/getting-started' },
+          { text: 'Getting started', link: '/getting-started' },
           { text: 'Architecture', link: '/architecture' }
         ]
       },
       {
         text: 'Reference',
         items: [
-          { text: 'RPC System', link: '/rpc-system' },
+          { text: 'RPC system', link: '/rpc-system' },
           { text: 'SyncVars', link: '/syncvars' },
-          { text: 'Transport Layer', link: '/transport' },
-          { text: 'API Reference', link: '/api-reference' }
+          { text: 'Transport layer', link: '/transport' },
+          { text: 'API reference', link: '/api-reference' }
         ]
       }
     ],

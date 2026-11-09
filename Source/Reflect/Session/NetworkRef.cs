@@ -3,8 +3,8 @@
 namespace Reflect;
 
 /// <summary>
-/// A serializable reference to a networked object. Stores netId on the wire,
-/// resolves to the live NetworkIdentity lazily via the spawned dictionary.
+/// A serializable reference to a networked object. Only the NetId goes on the wire.
+/// <see cref="Resolve()"/> looks it up in the Spawned dictionary on each call.
 /// </summary>
 public readonly struct NetworkRef : IEquatable<NetworkRef>
 {
@@ -17,9 +17,8 @@ public readonly struct NetworkRef : IEquatable<NetworkRef>
     public bool IsNull => NetId == 0;
 
     /// <summary>
-    /// Resolve to the live identity on this peer. Returns null if the target
-    /// hasn't spawned here yet (or is null). Always re-resolves — never caches,
-    /// so it stays correct across despawn/respawn.
+    /// Looks up the live identity on this peer. Returns null for a null ref or a target that hasn't spawned here.
+    /// Nothing is cached, so the result stays correct after a despawn.
     /// </summary>
     public NetworkIdentity Resolve()
     {
@@ -27,7 +26,7 @@ public readonly struct NetworkRef : IEquatable<NetworkRef>
         var nm = NetworkManager.Instance;
         if (nm == null) return null;
 
-        // Look in whichever side(s) we're running.
+        // Check whichever endpoint this process runs.
         if (NetworkManager.IsServer && nm.Server.Spawned.TryGetValue(NetId, out var s))
             return s;
         if (NetworkManager.IsClient && nm.Client.Spawned.TryGetValue(NetId, out var c))
@@ -36,7 +35,7 @@ public readonly struct NetworkRef : IEquatable<NetworkRef>
     }
 
     /// <summary>
-    /// Resolve and fetch a specific NetworkScript off the target.
+    /// Resolves the target and returns its script of type <typeparamref name="T"/>, or null.
     /// </summary>
     public T Resolve<T>() where T : NetworkScript
     {

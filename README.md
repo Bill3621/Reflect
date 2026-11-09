@@ -14,7 +14,7 @@ Reflect wraps Flax's low-level `NetworkPeer` / ENet layer so you don't have to t
 - `SyncList<T>` and `SyncDictionary<TKey, TValue>` with operation-level delta tracking, plus read-only inspector editors
 - `NetworkIdentity` and `NetworkScript` for spawn/despawn lifecycle on prefabs
 - `NetworkTransform` with client-authoritative movement, snapshot interpolation, configurable send rate, and movement thresholds
-- Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects they can actually see
+- Interest management (`IInterestManagement`) with `GlobalInterest`, `DistanceInterest`, and `GridInterest` (spatial hash grid) implementations, so clients only receive objects near them
 - Server-driven scene changes (`Server.ChangeScene`), with late joiners loading the server's current scene
 - `ReflectSettings` asset for project-wide config, with no scene setup needed to start a session
 - Editor toolbar button that launches a separate headless server, auto-starts the local client, and forwards server logs
@@ -77,8 +77,7 @@ For packaged builds, start the server or client with command-line arguments (`se
 │  ┌─────────────┐  ┌────────────────────┐    │
 │  │  Session     │  │    Components      │    │
 │  │  Manager     │  │  NetworkTransform  │    │
-│  │  ManagerUI   │  └────────────────────┘    │
-│  │  Server      │                            │
+│  │  Server      │  └────────────────────┘    │
 │  │  Client      │  ┌────────────────────┐    │
 │  │  Identity    │  │      Transport      │    │
 │  │  Script      │  │  ITransport (iface) │    │

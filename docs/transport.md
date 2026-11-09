@@ -1,4 +1,4 @@
-# Transport Layer
+# Transport layer
 
 The transport is the lowest layer in Reflect. It moves bytes between a server and clients and tells the session layer when connections open, deliver data, or close. Everything above it (`NetworkServer`, `NetworkClient`, `NetworkManager`) is written against the `ITransport` interface, so the wire protocol can be swapped without touching gameplay code.
 
@@ -34,13 +34,13 @@ public interface ITransport
 
 Connections are identified by an `int` on the server side. `OnClientDisconnected` fires only when the connection closes without the client asking. Its argument is true for a timeout. `ServerDisconnect` delivers data already passed to `ServerSend` before it closes the connection, and does not raise `OnServerDisconnected`. Data arrives as an `ArraySegment<byte>`. The channel type is passed straight through to the underlying network layer.
 
-`Poll` is the pump. `NetworkManager` calls it every frame. A transport is free to buffer events and deliver them all during `Poll`, which is exactly what `LoopbackTransport` does.
+`Poll` is the pump. `NetworkManager` calls it every frame. A transport is free to buffer events and deliver them all during `Poll`, which is what `LoopbackTransport` does.
 
 ## FlaxTransport
 
-`FlaxTransport` is the production implementation. It wraps Flax's `NetworkPeer` with an `ENetDriver`, which gives you ENet over UDP.
+`FlaxTransport` is the production implementation. It wraps Flax's `NetworkPeer` with an `ENetDriver`, which runs ENet over UDP.
 
-It exposes a handful of properties you set before starting:
+Set these properties before starting:
 
 - `Address` (string, default `127.0.0.1`)
 - `Port` (ushort, default `7777`)

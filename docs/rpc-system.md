@@ -1,4 +1,4 @@
-# RPC System
+# RPC system
 
 RPCs (remote procedure calls) are how gameplay code talks across the network. Reflect gives you three attributes, one per direction. You mark a method, and Reflect handles serialization, routing, and dispatch.
 

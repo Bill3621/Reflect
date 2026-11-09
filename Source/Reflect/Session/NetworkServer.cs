@@ -197,7 +197,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
 
     /// <summary>
-    /// Disconnects one client from the server.
+    /// Disconnects one client. The client receives <paramref name="message"/> and reports <see cref="DisconnectReason.Kicked"/>.
     /// </summary>
     public void Kick(NetworkConnection conn, string message = "")
     {
@@ -318,7 +318,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
 
     /// <summary>
-    /// Spawn a prefab-based networked object on the server and all clients.
+    /// Instantiates a prefab on the server and spawns it on every connection whose interest includes it.
     /// </summary>
     public NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)
     {
@@ -402,7 +402,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
     
     /// <summary>
-    /// Called each tick: push dirty syncvars to clients.
+    /// Runs every sync interval. Moves scene-ready connections forward, rebuilds observers when due, and sends dirty SyncVars.
     /// </summary>
     public void Update()
     {

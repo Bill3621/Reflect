@@ -44,7 +44,7 @@ public interface ITransport
 }
 
 /// <summary>
-/// In-process transport: server and client in the same app. Great for tests.
+/// In-process transport with one simulated connection (id 1). No sockets, so tests can run server and client in one process.
 /// </summary>
 public sealed class LoopbackTransport : ITransport
 {

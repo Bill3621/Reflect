@@ -9,13 +9,13 @@ namespace Reflect;
 public interface IInterestManagement
 {
     /// <summary>
-    /// Refresh internal acceleration structures for this rebuild.
+    /// Called once per observer rebuild with every spawned identity, before any <see cref="GatherVisible"/> call.
     /// </summary>
     void Rebuild(IReadOnlyCollection<NetworkIdentity> all) {}
     
     /// <summary>
-    /// Fill <paramref name="result"/> with the netIds this connection should
-    /// observe. This is the fast path — only touch nearby objects.
+    /// Fills <paramref name="result"/> with the netIds this connection should observe.
+    /// Runs once per connection per rebuild, so implementations should only visit nearby objects.
     /// </summary>
     void GatherVisible(NetworkConnection conn, HashSet<uint> result) {}
 }

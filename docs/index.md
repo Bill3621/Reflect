@@ -7,7 +7,7 @@ hero:
   tagline: Mirror-inspired networking, extracted from a real multiplayer game. C# only, targets .NET 10 and Flax Engine 1.12.
   actions:
     - theme: brand
-      text: Get Started
+      text: Get started
       link: /getting-started
     - theme: alt
       text: GitHub
