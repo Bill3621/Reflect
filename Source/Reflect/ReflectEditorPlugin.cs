@@ -32,7 +32,12 @@ public class ReflectEditorPlugin : EditorPlugin
     {
         base.InitializeEditor();
 
-        if (Editor.IsHeadlessMode) return;
+        if (Editor.IsHeadlessMode)
+        {
+            if (Font.GlobalScale <= 0f)
+                Font.SetGlobalScale(1f);
+            return;
+        }
 
         _settingsProxy = new CustomSettingsProxy(typeof(ReflectSettings), ReflectSettings.Key);
         Editor.ContentDatabase.AddProxy(_settingsProxy, true);
