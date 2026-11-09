@@ -60,6 +60,12 @@ public class NetworkTransform : NetworkScript
          Float3 pos = Actor.Position;
          var rot = Actor.Orientation;
 
+         if (!IsValid(pos) || !IsValid(rot))
+         {
+            Debug.LogError($"[NetworkTransform] Invalid LOCAL transform for {Actor.Name}: Position={pos}, Rotation={rot}");
+            return;
+         }
+
          var moved = Float3.Distance(pos, _lastSentPos) > PositionThreshold;
          var rotated = Quaternion.AngleBetween(rot, _lastSendRot) > RotationThreshold;
          if(!moved && !rotated) return;
@@ -95,6 +101,7 @@ public class NetworkTransform : NetworkScript
          var a = _buffer[i];
          var b = _buffer[i + 1];
          if (!(renderTime >= a.Time) || !(renderTime <= b.Time)) continue;
+         if (b.Time <= a.Time) continue;
          var t = (float)((renderTime - a.Time) / (b.Time - a.Time));
          Actor.Position = Float3.Lerp(a.Position, b.Position, t);
          Actor.Orientation = Quaternion.Slerp(a.Rotation, b.Rotation, t);
@@ -112,10 +119,20 @@ public class NetworkTransform : NetworkScript
       SendClientRpc(nameof(RpcMove), pos, Actor.Orientation, true);
    }
 
+   private static bool IsValid(Float3 p) => float.IsFinite(p.X) && float.IsFinite(p.Y) && float.IsFinite(p.Z);
+   private static bool IsValid(Quaternion q) => float.IsFinite(q.X) && float.IsFinite(q.Y) && float.IsFinite(q.Z) && float.IsFinite(q.W);
+
    [Command(ChannelType = NetworkChannelType.Unreliable)]
    private void CmdMove(Float3 pos, Quaternion rot)
    {
       if (!ClientAuthority) return;
+
+      if (!IsValid(pos) || !IsValid(rot))
+      {
+         Debug.LogError($"[NetworkTransform] Invalid transform for {Actor.Name}: Position={pos}, Rotation={rot}");
+         return;
+      }
+
       // TODO: Server validation?
       Actor.Position = pos;
       Actor.Orientation = rot;
