@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using FlaxEngine;
 
@@ -12,6 +12,7 @@ public class NetworkManager : GamePlugin
     public ReflectSettings Settings { get; private set; } = new();
 
     public event Action OnServerStarted;
+    public event Action<DisconnectInfo> OnClientDisconnected;
 
     public static bool IsServer => Instance?.Server is { Active: true };
     public static bool IsClient => Instance?.Client is { Active: true };
@@ -108,6 +109,7 @@ public class NetworkManager : GamePlugin
         }
         ReloadSettings();
         Client = new NetworkClient(_transport, _registry);
+        Client.OnDisconnected += info => OnClientDisconnected?.Invoke(info);
         Client.Connect();
     }
 

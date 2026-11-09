@@ -73,7 +73,7 @@ This split exists because spawning the relevant world into a new client takes a 
 
 Most gameplay code wants `OnPlayerLoaded`. Use `OnPlayerConnected` only if you need to do something before the world spawn begins, like assigning metadata or logging.
 
-Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing.
+Disconnecting a client or stopping a server invokes despawn hooks for that endpoint's spawned objects, destroys prefab actors, and clears its session registries. Scene actors return to their pre-session position, orientation, and active state, with their network IDs and ownership reset. Repeated start/connect calls while active, or stop/disconnect calls while inactive, do nothing. After teardown the client raises `OnDisconnected` with a `DisconnectInfo` saying why the session ended. A kick sends a `Disconnect` message first, so the client can report `Kicked` along with the server's message.
 
 `ReloadSettings()` keeps the current transport while either endpoint is active. Address, port, and connection-limit changes take effect after both endpoints stop and the transport is rebuilt.
 

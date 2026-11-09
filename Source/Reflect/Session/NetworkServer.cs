@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -197,14 +197,27 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
 
     /// <summary>
-    /// Disconnects one client from the server. Cleanup and <see cref="OnPlayerDisconnected"/> run immediately,
-    /// the same as when the client leaves on its own.
+    /// Disconnects one client from the server.
     /// </summary>
-    public void Kick(NetworkConnection conn)
+    public void Kick(NetworkConnection conn, string message = "")
     {
         if (!Active || conn == null || !Connections.ContainsKey(conn.Id)) return;
-        transport.ServerDisconnect(conn.Id);
-        OnDisconnected(conn.Id);
+        _w.Reset();
+        _w.BeginMessage(MsgType.Disconnect);
+        _w.WriteByte((byte)DisconnectReason.Kicked);
+        _w.WriteString(message);
+        _w.FinishMessage();
+        try
+        {
+            // Sent directly, since SendToConnection skips clients that are still loading.
+            transport.ServerSend(conn.Id, _w.ToSegment());
+        }
+        finally
+        {
+            // The transport delivers the message before it drops the connection.
+            transport.ServerDisconnect(conn.Id);
+            OnDisconnected(conn.Id);
+        }
     }
 
     private void OnDisconnected(int connId)

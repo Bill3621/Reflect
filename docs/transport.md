@@ -22,7 +22,7 @@ public interface ITransport
     // Client
     event Action OnClientConnected;
     event Action<ArraySegment<byte>> OnClientData;
-    event Action OnClientDisconnected;
+    event Action<bool> OnClientDisconnected; // true when timed out
     void ClientConnect();
     void ClientSend(ArraySegment<byte> data,
         NetworkChannelType channelType = NetworkChannelType.ReliableOrdered);
@@ -32,7 +32,7 @@ public interface ITransport
 }
 ```
 
-Connections are identified by an `int` on the server side. Data arrives as an `ArraySegment<byte>`. The channel type is passed straight through to the underlying network layer.
+Connections are identified by an `int` on the server side. `OnClientDisconnected` fires only when the connection closes without the client asking. Its argument is true for a timeout. `ServerDisconnect` delivers data already passed to `ServerSend` before it closes the connection, and does not raise `OnServerDisconnected`. Data arrives as an `ArraySegment<byte>`. The channel type is passed straight through to the underlying network layer.
 
 `Poll` is the pump. `NetworkManager` calls it every frame. A transport is free to buffer events and deliver them all during `Poll`, which is exactly what `LoopbackTransport` does.
 
@@ -94,7 +94,7 @@ Because of this prefix, the practical max Reflect payload per send is `MessageSi
 
 It never touches the network. This makes it handy for unit tests, automated checks, or local prototyping where you want a server and client in the same process without sockets.
 
-Both transports honor the offset and count of each `ArraySegment<byte>`. `LoopbackTransport` copies each segment into a new array on enqueue. It requires a running server before connecting, discards queued packets on disconnect or stop, and notifies its client when the server stops. It ignores `channelType` because there is no real network layer to configure reliability on.
+Both transports honor the offset and count of each `ArraySegment<byte>`. `LoopbackTransport` copies each segment into a new array on enqueue. It requires a running server before connecting and discards queued packets on stop or a client disconnect. `ServerDisconnect` drops the client on the next `Poll`, after delivering what was already queued for it. The client is notified when the server stops or drops it. It ignores `channelType` because there is no real network layer to configure reliability on.
 
 ## Channel types
 

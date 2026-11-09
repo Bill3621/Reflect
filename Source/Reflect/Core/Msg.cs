@@ -13,8 +13,9 @@ public enum MsgType : byte
     Command = 5,
     ClientRpc = 6,
     TargetRpc = 7,
-    LoadScene = 8,  // server -> client: Guid scene, uint loadId
-    SceneReady = 9  // client -> server: uint loadId
+    LoadScene = 8,
+    SceneReady = 9,
+    Disconnect = 10
 }
 
 public static class Msg

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,6 +19,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     public readonly Dictionary<Guid, NetworkIdentity> SceneObjects = [];
     
     public bool Active { get; private set; }
+    private bool _connected;
 
     /// <summary>The scene the server told this client to be in.</summary>
     public SceneReference ActiveScene { get; private set; }
@@ -30,13 +31,16 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     public event Action<SceneReference> OnSceneChanging;
     /// <summary>Fires once per scene, after the server sent that scene's world.</summary>
     public event Action OnReady;
+    /// <summary>Fires once per session, after the client's world is torn down. Use it to tell the player what happened.</summary>
+    public event Action<DisconnectInfo> OnDisconnected;
 
     public void Connect()
     {
         if (Active) return;
         Active = true;
+        transport.OnClientConnected += OnTransportConnected;
         transport.OnClientData += OnData;
-        transport.OnClientDisconnected += OnDisconnected;
+        transport.OnClientDisconnected += OnTransportDisconnected;
         Level.SceneLoaded += OnLevelSceneLoaded;
         try
         {
@@ -44,17 +48,21 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         }
         catch
         {
-            Disconnect();
+            Disconnect(new DisconnectInfo(DisconnectReason.ConnectFailed));
             throw;
         }
     }
 
-    public void Disconnect()
+    public void Disconnect() => Disconnect(new DisconnectInfo(DisconnectReason.ClientRequested));
+
+    private void Disconnect(DisconnectInfo info)
     {
         if (!Active) return;
         Active = false;
+        _connected = false;
+        transport.OnClientConnected -= OnTransportConnected;
         transport.OnClientData -= OnData;
-        transport.OnClientDisconnected -= OnDisconnected;
+        transport.OnClientDisconnected -= OnTransportDisconnected;
         Level.SceneLoaded -= OnLevelSceneLoaded;
         try
         {
@@ -71,6 +79,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
             _loadId = 0;
             _packetReader.SetBuffer(default);
             _r.SetBuffer(default);
+            OnDisconnected?.Invoke(info);
         }
     }
     
@@ -123,7 +132,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         if (Level.ChangeSceneAsync(scene))
         {
             Debug.LogError($"Server asked for scene {scene}, but it could not be loaded.");
-            Disconnect();
+            Disconnect(new DisconnectInfo(DisconnectReason.SceneLoadFailed));
         }
     }
 
@@ -149,7 +158,22 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         Send(_w.ToSegment());
     }
 
-    private void OnDisconnected() => Disconnect();
+    private void OnTransportConnected() => _connected = true;
+
+    private void OnTransportDisconnected(bool timedOut)
+    {
+        var reason = !_connected ? DisconnectReason.ConnectFailed : timedOut ? DisconnectReason.ConnectionLost : DisconnectReason.ServerClosed;
+        Disconnect(new DisconnectInfo(reason));
+    }
+
+    private void HandleDisconnect()
+    {
+        var reason = (DisconnectReason)_r.ReadByte();
+        var message = _r.ReadString() ?? "";
+        if (_r.HasMore || !Enum.IsDefined(reason))
+            throw new InvalidDataException("Malformed Disconnect message.");
+        Disconnect(new DisconnectInfo(reason, message));
+    }
     
     public void Send(ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered) => transport.ClientSend(data, channelType);
     
@@ -163,9 +187,10 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
                 var type = Msg.ReadHeader(_packetReader);
                 _r.SetBuffer(_packetReader.ReadSegment(_packetReader.ReadLength()));
                 // Nothing from the previous scene applies while the next one loads.
-                if (IsLoadingScene && type != MsgType.LoadScene) continue;
+                if (IsLoadingScene && type is not (MsgType.LoadScene or MsgType.Disconnect)) continue;
                 switch (type)
                 {
+                    case MsgType.Disconnect: HandleDisconnect(); break;
                     case MsgType.LoadScene: HandleLoadScene(); break;
                     case MsgType.Spawn: HandleSpawn(); break;
                     case MsgType.Despawn: HandleDespawn(); break;

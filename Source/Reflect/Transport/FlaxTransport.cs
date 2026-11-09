@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using FlaxEngine;
@@ -13,7 +13,7 @@ public sealed class FlaxTransport : ITransport
     public event Action<int> OnServerDisconnected;
     public event Action OnClientConnected;
     public event Action<ArraySegment<byte>> OnClientData;
-    public event Action OnClientDisconnected;
+    public event Action<bool> OnClientDisconnected;
 
     public string Address { get; set; } = "127.0.0.1";
     public ushort Port { get; set; } = 7777;
@@ -24,6 +24,8 @@ public sealed class FlaxTransport : ITransport
     private NetworkPeer _serverPeer;
     private NetworkPeer _clientPeer;
     private readonly HashSet<uint> _serverConnections = [];
+    private readonly Dictionary<uint, long> _closing = [];
+    private const long CloseGraceMs = 1000;
     
     public void ServerStart()
     {
@@ -41,15 +43,26 @@ public sealed class FlaxTransport : ITransport
         
         var msg = _serverPeer.BeginSendMessage();
         WritePayload(ref msg, data);
-        _serverPeer.EndSendMessage(channelType, msg,
-            new FlaxEngine.Networking.NetworkConnection { ConnectionId = (uint)connectionId });
+        _serverPeer.EndSendMessage(channelType, msg, new FlaxEngine.Networking.NetworkConnection { ConnectionId = (uint)connectionId });
     }
 
     public void ServerDisconnect(int connectionId)
     {
-        // Removing first means a late Disconnected event from the peer is not reported again.
+        // Removing first means a later Disconnected event from the peer is not reported.
         if (_serverPeer == null || !_serverConnections.Remove((uint)connectionId)) return;
-        _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection { ConnectionId = (uint)connectionId });
+        _closing[(uint)connectionId] = Environment.TickCount64 + CloseGraceMs;
+    }
+
+    private void DropExpiredConnections()
+    {
+        if (_closing.Count == 0) return;
+        var now = Environment.TickCount64;
+        foreach (var (id, deadline) in _closing)
+        {
+            if (now < deadline) continue;
+            _closing.Remove(id);
+            _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection { ConnectionId = id });
+        }
     }
 
     public void ServerStop()
@@ -57,9 +70,12 @@ public sealed class FlaxTransport : ITransport
         if (_serverPeer == null) return;
 
         foreach (var id in _serverConnections)
-            _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection() {ConnectionId = id});
-        
+            _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection { ConnectionId = id });
+        foreach (var id in _closing.Keys)
+            _serverPeer.Disconnect(new FlaxEngine.Networking.NetworkConnection { ConnectionId = id });
+
         _serverConnections.Clear();
+        _closing.Clear();
         NetworkPeer.ShutdownPeer(_serverPeer);
         _serverPeer = null;
     }
@@ -95,6 +111,7 @@ public sealed class FlaxTransport : ITransport
     public void Poll()
     {
         if (_serverPeer != null) PollPeer(_serverPeer, true);
+        if (_serverPeer != null) DropExpiredConnections();
         if (_clientPeer != null) PollPeer(_clientPeer, false);
     }
 
@@ -119,11 +136,12 @@ public sealed class FlaxTransport : ITransport
                 case NetworkEventType.Timeout:
                     if (isServer)
                     {
+                        _closing.Remove(evt.Sender.ConnectionId);
                         if (_serverConnections.Remove(evt.Sender.ConnectionId))
                             OnServerDisconnected?.Invoke((int)evt.Sender.ConnectionId);
                     }
                     else
-                        OnClientDisconnected?.Invoke();
+                        OnClientDisconnected?.Invoke(evt.EventType == NetworkEventType.Timeout);
                     break;
                 case NetworkEventType.Message:
                     try

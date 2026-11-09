@@ -13,6 +13,7 @@ Configuration (address, port, prefabs, etc.) comes from the `ReflectSettings` as
 - `static NetworkManager Instance`
 - `ReflectSettings Settings`
 - `event Action OnServerStarted`
+- `event Action<DisconnectInfo> OnClientDisconnected`
 - `static bool IsServer`, `static bool IsClient`
 - `NetworkServer Server`, `NetworkClient Client`
 - `void StartServer()`, `void StartClient()`
@@ -47,7 +48,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `event Action<NetworkConnection> OnPlayerLoaded` (once per connection per scene)
 - `event Action<NetworkConnection?> OnPlayerDisconnected`
 - `void Start()`, `void Stop()`
-- `void Kick(NetworkConnection conn)` (runs disconnect cleanup and `OnPlayerDisconnected` immediately)
+- `void Kick(NetworkConnection conn, string message = "")`
 - `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)` (fails while loading a scene)
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`
@@ -67,8 +68,22 @@ Created by `NetworkManager`. Manages spawned objects and incoming messages on th
 - `SceneReference ActiveScene`, `bool IsLoadingScene`
 - `event Action<SceneReference> OnSceneChanging`
 - `event Action OnReady` (once per scene)
+- `event Action<DisconnectInfo> OnDisconnected` (once per session, after teardown)
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
+
+### DisconnectInfo
+
+`readonly record struct DisconnectInfo(DisconnectReason Reason, string Message = "")`. `Message` is the server's text for a kick, otherwise empty.
+
+`DisconnectReason`:
+
+- `ClientRequested`: this client called `Disconnect()`
+- `ConnectFailed`: the connection closed before it was established, usually an unreachable server
+- `ServerClosed`: the server closed the connection without a reason, for example by shutting down
+- `ConnectionLost`: the connection timed out
+- `Kicked`: the server called `Kick`
+- `SceneLoadFailed`: the server asked for a scene this client could not load
 
 ### NetworkIdentity
 
@@ -276,6 +291,7 @@ Identifies a message on the wire. Byte enum.
 
 - `Spawn = 1`, `Despawn = 2`, `State = 3`, `WelcomeDone = 4`
 - `Command = 5`, `ClientRpc = 6`, `TargetRpc = 7`
+- `LoadScene = 8`, `SceneReady = 9`, `Disconnect = 10`
 
 ### Msg
 
