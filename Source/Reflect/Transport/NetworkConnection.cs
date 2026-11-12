@@ -14,6 +14,7 @@ public enum ConnectionPhase : byte { LoadingScene, Syncing, InGame }
 public sealed class NetworkConnection
 {
     public int Id;
+    public bool IsBot { get; internal init; }
     public ConnectionPhase Phase { get; internal set; }
     internal uint ReadyLoadId;
     public NetworkIdentity OwnedPlayer;

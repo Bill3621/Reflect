@@ -27,6 +27,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     public float RebuildInterval = 1.0f;
     
     private uint _nextNetId = 1;
+    private int _nextBotId = -1;
     
     public bool Active { get; private set; }
 
@@ -110,6 +111,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         ActiveScene = default;
         IsLoadingScene = false;
         _loadId = 0;
+        _nextBotId = -1;
         _allCache.Clear();
         _desired.Clear();
         _toAdd.Clear();
@@ -183,17 +185,44 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.WriteGuid(ActiveScene.ID);
         _w.WriteUIntVar(_loadId);
         _w.FinishMessage();
-        transport.ServerSend(conn.Id, _w.ToSegment());
+        Send(conn, _w.ToSegment());
+        if (conn.IsBot) conn.ReadyLoadId = _loadId;
     }
 
     private void OnConnected(int connId)
     {
         Debug.Log($"Client connected with connId={connId}");
-        var conn = new NetworkConnection { Id = connId, Phase = ConnectionPhase.LoadingScene };
-        Connections[connId] = conn;
-        SendLoadScene(conn);
+        Accept(new NetworkConnection { Id = connId, Phase = ConnectionPhase.LoadingScene });
+    }
 
+    private void Accept(NetworkConnection conn)
+    {
+        Connections[conn.Id] = conn;
+        SendLoadScene(conn);
         OnPlayerConnected?.Invoke(conn);
+    }
+
+    public NetworkConnection AddBot()
+    {
+        if (!Active)
+        {
+            Debug.LogError("AddBot requires an active server.");
+            return null;
+        }
+        var bot = new NetworkConnection { Id = _nextBotId--, IsBot = true, Phase = ConnectionPhase.LoadingScene };
+        Debug.Log($"Bot added with connId={bot.Id}");
+        Accept(bot);
+        return bot;
+    }
+    
+    public void RemoveBot(NetworkConnection bot)
+    {
+        if (bot is { IsBot: true }) OnDisconnected(bot.Id);
+    }
+    
+    private void Send(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
+    {
+        if (!conn.IsBot) transport.ServerSend(conn.Id, data, channelType);
     }
 
     /// <summary>
@@ -210,12 +239,12 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         try
         {
             // Sent directly, since SendToConnection skips clients that are still loading.
-            transport.ServerSend(conn.Id, _w.ToSegment());
+            Send(conn, _w.ToSegment());
         }
         finally
         {
             // The transport delivers the message before it drops the connection.
-            transport.ServerDisconnect(conn.Id);
+            if (!conn.IsBot) transport.ServerDisconnect(conn.Id);
             OnDisconnected(conn.Id);
         }
     }
@@ -233,14 +262,14 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     public void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
     {
         foreach (var conn in Connections.Values.Where(conn => conn.Observing.Contains(ni.NetId)))
-            transport.ServerSend(conn.Id, data, channelType);
+            Send(conn, data, channelType);
     }
 
     public void SendToConnection(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType = NetworkChannelType.ReliableOrdered)
     {
         // A loading client has no objects yet, so anything addressed to one would be dropped anyway.
         if (conn is { Phase: not ConnectionPhase.LoadingScene })
-            transport.ServerSend(conn.Id, data, channelType);
+            Send(conn, data, channelType);
     }
     
     private void OnData(int connId, ArraySegment<byte> data)
@@ -367,7 +396,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.WriteUIntVar(ni.NetId);
         _w.FinishMessage();
         foreach (var conn in Connections.Values.Where(conn => conn.Observing.Remove(ni.NetId)))
-            transport.ServerSend(conn.Id, _w.ToSegment());
+            Send(conn, _w.ToSegment());
         
         ni.NotifyDespawn();
         ni.ResetNetworkState();
@@ -397,7 +426,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             script.SerializeFull(_w);
         _w.FinishMessage();
         
-        transport.ServerSend(conn.Id, _w.ToSegment());
+        Send(conn, _w.ToSegment());
         conn.Observing.Add(ni.NetId);
     }
     
@@ -433,7 +462,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             _w.Reset();
             _w.BeginMessage(MsgType.WelcomeDone);
             _w.FinishMessage();
-            transport.ServerSend(conn.Id, _w.ToSegment());
+            Send(conn, _w.ToSegment());
             
             OnPlayerLoaded?.Invoke(conn);
         }
@@ -470,7 +499,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
         foreach (var conn in Connections.Values)
         {
-            if (conn.Phase == ConnectionPhase.LoadingScene) continue;
+            if (conn.Phase == ConnectionPhase.LoadingScene || conn.IsBot) continue;
             _desired.Clear();
             Interest.GatherVisible(conn, _desired);
             
@@ -501,6 +530,6 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _w.BeginMessage(MsgType.Despawn);
         _w.WriteUIntVar(netId);
         _w.FinishMessage();
-        transport.ServerSend(conn.Id, _w.ToSegment());  
+        Send(conn, _w.ToSegment());
     }
 }
