@@ -382,6 +382,26 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     /// </summary>
     public NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)
     {
+        var ni = Instantiate(prefab, pos, rot, owner);
+        if (ni != null) RebuildObservers();
+        return ni;
+    }
+
+    /// <summary>
+    /// Spawns <paramref name="owner"/>'s player object. Sets <see cref="NetworkConnection.OwnedPlayer"/> before observers
+    /// are rebuilt, so the owner sees everything its interest covers in the same tick instead of on the next timed rebuild.
+    /// </summary>
+    public NetworkIdentity SpawnPlayer(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner)
+    {
+        var ni = Instantiate(prefab, pos, rot, owner);
+        if (ni == null) return null;
+        owner.OwnedPlayer = ni;
+        RebuildObservers();
+        return ni;
+    }
+
+    private NetworkIdentity Instantiate(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner)
+    {
         if (!Active)
         {
             Debug.LogError("Spawn requires an active server.");
@@ -413,8 +433,6 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         Spawned[ni.NetId] = ni;
         
         foreach(var s in ni.Scripts) s.OnNetworkSpawn();
-
-        RebuildObservers();
         return ni;
     }
 

@@ -54,6 +54,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `void Start()`, `void Stop()`
 - `void Kick(NetworkConnection conn, string message = "")` (also works on connections still authenticating)
 - `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)` (fails while loading a scene)
+- `NetworkIdentity SpawnPlayer(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner)` (like `Spawn`, but sets `owner.OwnedPlayer` before observers rebuild so the owner sees nearby objects immediately)
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`
 - `void SendToConnection(NetworkConnection conn, ArraySegment<byte> data, NetworkChannelType channelType)`
