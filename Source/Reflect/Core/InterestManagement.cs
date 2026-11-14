@@ -90,12 +90,7 @@ public sealed class GridInterest : IInterestManagement
     public void GatherVisible(NetworkConnection conn, HashSet<uint> result)
     {
         var view = conn.OwnedPlayer;
-        if (view == null)
-        {
-            if (conn.OwnedPlayer != null)
-                result.Add(conn.OwnedPlayer.NetId);
-            return;
-        }
+        if (view == null) return;
 
         const int loose = ViewRadiusInCells + HysteresisCells;
 

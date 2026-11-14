@@ -544,6 +544,8 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             if (conn.Phase == ConnectionPhase.LoadingScene || conn.IsBot) continue;
             _desired.Clear();
             Interest.GatherVisible(conn, _desired);
+            foreach (var ni in _allCache.Where(ni => ni.Owner == conn))
+                _desired.Add(ni.NetId);
             
             _toAdd.Clear();
             foreach (var netId in _desired.Where(netId => !conn.Observing.Contains(netId)))

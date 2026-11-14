@@ -60,7 +60,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `void RebuildObservers()`
 - `void Update()`
 
-Spawning and despawning go through the interest management system. When an object spawns, the server calls `RebuildObservers()`, which asks the current `IInterestManagement` implementation which objects each connection should see, then sends spawn messages to connections that should start seeing an object and despawn messages to connections that should stop. `Update()` periodically calls `RebuildObservers()` (every `RebuildInterval` seconds) to keep visibility current as objects move.
+Spawning and despawning go through the interest management system. When an object spawns, the server calls `RebuildObservers()`, which asks the current `IInterestManagement` implementation which objects each connection should see, adds every object the connection owns, then sends spawn messages to connections that should start seeing an object and despawn messages to connections that should stop. `Update()` periodically calls `RebuildObservers()` (every `RebuildInterval` seconds) to keep visibility current as objects move.
 
 ### NetworkClient
 
@@ -142,7 +142,7 @@ Static cache that discovers RPC methods by reflection and assigns stable IDs.
 
 ### IInterestManagement
 
-Interface for controlling which networked objects each connection can see. The server calls `Rebuild` with all spawned identities, then calls `GatherVisible` per connection to determine the visible set.
+Interface for controlling which networked objects each connection can see. The server calls `Rebuild` with all spawned identities, then calls `GatherVisible` per connection to determine the visible set. The server adds objects a connection owns on top, so implementations do not need to.
 
 - `void Rebuild(IReadOnlyCollection<NetworkIdentity> all)`
 - `void GatherVisible(NetworkConnection conn, HashSet<uint> result)`
