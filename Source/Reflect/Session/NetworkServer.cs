@@ -17,10 +17,15 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private readonly NetworkReader _r = new();
     
     private readonly List<NetworkConnection> _promoted = [];
+    private readonly Dictionary<int, NetworkConnection> _pending = [];
+    private readonly List<NetworkConnection> _expired = [];
     private readonly List<SceneObjectState> _sceneStates = [];
 
     public readonly Dictionary<uint, NetworkIdentity> Spawned = [];
     public readonly Dictionary<int, NetworkConnection> Connections = [];
+    
+    public IServerAuthenticator Authenticator;
+    public float AuthTimeout = 15f;
 
     public IInterestManagement Interest = new GlobalInterest();
     private readonly Stopwatch _rebuildTimer = Stopwatch.StartNew();
@@ -101,8 +106,12 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         {
             connection.Observing.Clear();
             connection.OwnedPlayer = null;
+            Authenticator?.OnDisconnected(connection);
         }
+        foreach (var connection in _pending.Values) Authenticator?.OnDisconnected(connection);
         Connections.Clear();
+        _pending.Clear();
+        _expired.Clear();
         _promoted.Clear();
         foreach (var identity in Spawned.Values.ToArray()) Despawn(identity);
         foreach (var state in _sceneStates) state.Restore();
@@ -192,11 +201,23 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     private void OnConnected(int connId)
     {
         Debug.Log($"Client connected with connId={connId}");
-        Accept(new NetworkConnection { Id = connId, Phase = ConnectionPhase.LoadingScene });
+        if (Authenticator == null)
+        {
+            Accept(new NetworkConnection { Id = connId });
+            return;
+        }
+        _pending[connId] = new NetworkConnection { Id = connId, Phase = ConnectionPhase.Authenticating, AuthStarted = Stopwatch.GetTimestamp() };
+    }
+    
+    public void Admit(NetworkConnection conn)
+    {
+        if (conn == null || !_pending.Remove(conn.Id)) return;
+        Accept(conn);
     }
 
     private void Accept(NetworkConnection conn)
     {
+        conn.Phase = ConnectionPhase.LoadingScene;
         Connections[conn.Id] = conn;
         SendLoadScene(conn);
         OnPlayerConnected?.Invoke(conn);
@@ -209,7 +230,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             Debug.LogError("AddBot requires an active server.");
             return null;
         }
-        var bot = new NetworkConnection { Id = _nextBotId--, IsBot = true, Phase = ConnectionPhase.LoadingScene };
+        var bot = new NetworkConnection { Id = _nextBotId--, IsBot = true };
         Debug.Log($"Bot added with connId={bot.Id}");
         Accept(bot);
         return bot;
@@ -226,11 +247,11 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
 
     /// <summary>
-    /// Disconnects one client. The client receives <paramref name="message"/> and reports <see cref="DisconnectReason.Kicked"/>.
+    /// Disconnects one client, admitted or still authenticating. The client receives <paramref name="message"/> and reports <see cref="DisconnectReason.Kicked"/>.
     /// </summary>
     public void Kick(NetworkConnection conn, string message = "")
     {
-        if (!Active || conn == null || !Connections.ContainsKey(conn.Id)) return;
+        if (!Active || conn == null || !(Connections.ContainsKey(conn.Id) || _pending.ContainsKey(conn.Id))) return;
         _w.Reset();
         _w.BeginMessage(MsgType.Disconnect);
         _w.WriteByte((byte)DisconnectReason.Kicked);
@@ -251,11 +272,18 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
 
     private void OnDisconnected(int connId)
     {
+        if (_pending.Remove(connId, out var pending))
+        {
+            Debug.Log($"Client disconnected before authenticating, connId={connId}");
+            Authenticator?.OnDisconnected(pending);
+            return;
+        }
         if (!Connections.Remove(connId, out var conn)) return;
         Debug.Log($"Client disconnected with connId={connId}");
         if (conn.OwnedPlayer != null) Despawn(conn.OwnedPlayer);
         conn.Observing.Clear();
         conn.OwnedPlayer = null;
+        Authenticator?.OnDisconnected(conn);
         OnPlayerDisconnected?.Invoke(conn);
     }
 
@@ -274,7 +302,7 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     
     private void OnData(int connId, ArraySegment<byte> data)
     {
-        if (!Connections.TryGetValue(connId, out var conn)) return;
+        if (!Connections.TryGetValue(connId, out var conn) && !_pending.TryGetValue(connId, out conn)) return;
         _packetReader.SetBuffer(data);
         try
         {
@@ -282,8 +310,11 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
             {
                 var type = Msg.ReadHeader(_packetReader);
                 _r.SetBuffer(_packetReader.ReadSegment(_packetReader.ReadLength()));
+                if (conn.Phase == ConnectionPhase.Authenticating && type != MsgType.Auth) continue;
                 switch (type)
                 {
+                    case MsgType.Auth when conn.Phase == ConnectionPhase.Authenticating: Authenticator.OnPayload(this, conn, _r); break;
+                    case MsgType.Auth: break;
                     case MsgType.Command: HandleCommand(conn); break;
                     case MsgType.SceneReady: HandleSceneReady(conn); break;
                     default: Debug.LogWarning($"Server got unexpected msg {type}"); break;
@@ -431,11 +462,14 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
     }
     
     /// <summary>
-    /// Runs every sync interval. Moves scene-ready connections forward, rebuilds observers when due, and sends dirty SyncVars.
+    /// Runs every sync interval. Kicks connections that took too long to authenticate, moves scene-ready connections forward,
+    /// rebuilds observers when due, and sends dirty SyncVars.
     /// </summary>
     public void Update()
     {
-        if (!Active || IsLoadingScene) return;
+        if (!Active) return;
+        KickExpiredAuth();
+        if (IsLoadingScene) return;
         
         _promoted.Clear();
         foreach (var conn in Connections.Values)
@@ -469,6 +503,14 @@ public sealed class NetworkServer(ITransport transport, Dictionary<Guid, Prefab>
         _promoted.Clear();
     }
     
+    private void KickExpiredAuth()
+    {
+        _expired.Clear();
+        _expired.AddRange(_pending.Values.Where(conn => Stopwatch.GetElapsedTime(conn.AuthStarted).TotalSeconds > AuthTimeout));
+        foreach (var conn in _expired) Kick(conn, "Authentication timed out.");
+        _expired.Clear();
+    }
+
     private void SendState(NetworkIdentity ni)
     {
         foreach (var script in ni.Scripts)

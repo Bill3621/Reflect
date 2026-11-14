@@ -16,6 +16,7 @@ Configuration (address, port, prefabs, etc.) comes from the `ReflectSettings` as
 - `event Action<DisconnectInfo> OnClientDisconnected`
 - `static bool IsServer`, `static bool IsClient`
 - `NetworkServer Server`, `NetworkClient Client`
+- `IServerAuthenticator ServerAuthenticator`, `IClientAuthenticator ClientAuthenticator` (handed to the next server or client started)
 - `void StartServer()`, `void StartClient()`
 - `void ReloadSettings()` (no-op while a server or client is active)
 
@@ -39,6 +40,9 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `Dictionary<uint, NetworkIdentity> Spawned`
 - `Dictionary<int, NetworkConnection> Connections`
 - `IInterestManagement Interest` (default `GlobalInterest`)
+- `IServerAuthenticator Authenticator` (default null, admits everyone)
+- `float AuthTimeout` (default 15, seconds before an unauthenticated connection is kicked)
+- `void Admit(NetworkConnection conn)` (lets an authenticating connection join)
 - `float RebuildInterval` (default 1.0, seconds between observer rebuilds)
 - `bool Active`
 - `SceneReference ActiveScene`, `bool IsLoadingScene`
@@ -48,7 +52,7 @@ Created by `NetworkManager` with a transport and a prefab registry. Manages spaw
 - `event Action<NetworkConnection> OnPlayerLoaded` (once per connection per scene)
 - `event Action<NetworkConnection?> OnPlayerDisconnected`
 - `void Start()`, `void Stop()`
-- `void Kick(NetworkConnection conn, string message = "")`
+- `void Kick(NetworkConnection conn, string message = "")` (also works on connections still authenticating)
 - `NetworkIdentity Spawn(Prefab prefab, Vector3 pos, Quaternion rot, NetworkConnection owner = null)` (fails while loading a scene)
 - `void Despawn(NetworkIdentity ni)`
 - `void SendToObservers(NetworkIdentity ni, ArraySegment<byte> data, NetworkChannelType channelType)`
@@ -65,12 +69,20 @@ Created by `NetworkManager`. Manages spawned objects and incoming messages on th
 - `Dictionary<uint, NetworkIdentity> Spawned`
 - `Dictionary<Guid, NetworkIdentity> SceneObjects`
 - `bool Active`
+- `IClientAuthenticator Authenticator` (default null)
 - `SceneReference ActiveScene`, `bool IsLoadingScene`
 - `event Action<SceneReference> OnSceneChanging`
 - `event Action OnReady` (once per scene)
 - `event Action<DisconnectInfo> OnDisconnected` (once per session, after teardown)
 - `void Connect()`, `void Disconnect()`
 - `void Send(ArraySegment<byte> data, NetworkChannelType channelType)`
+
+### Authentication
+
+Optional login handshake. With a server `Authenticator` set, a new connection waits outside `Connections` in `ConnectionPhase.Authenticating`. The client's `IClientAuthenticator.WritePayload` runs once the transport connects, and the server hands that payload to `IServerAuthenticator.OnPayload`. The authenticator then calls `Admit` or `Kick`, now or after an outside check. Until then the connection may only send its payload, and it gets no `OnPlayerConnected`. Bots skip authentication.
+
+- `IServerAuthenticator`: `void OnPayload(NetworkServer server, NetworkConnection conn, NetworkReader payload)`, `void OnDisconnected(NetworkConnection conn)` (admitted or not)
+- `IClientAuthenticator`: `void WritePayload(NetworkWriter writer)`, `void OnDisconnected()`
 
 ### DisconnectInfo
 
@@ -327,6 +339,8 @@ In-process transport for testing. No network. Single simulated connection (ID `1
 Represents a connected client on the server side.
 
 - `int Id`
+- `ConnectionPhase Phase` (`Authenticating`, `LoadingScene`, `Syncing`, `InGame`)
+- `object AuthData` (set by the server's authenticator, such as a verified account)
 - `NetworkIdentity OwnedPlayer`
 - `HashSet<uint> Observing`
 

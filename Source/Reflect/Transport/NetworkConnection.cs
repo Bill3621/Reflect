@@ -7,9 +7,10 @@ namespace Reflect;
 
 /// <summary>
 /// Where a connection is in joining the server's current scene.
+/// Authenticating: held by <see cref="NetworkServer.Authenticator"/>, not yet in <see cref="NetworkServer.Connections"/>.
 /// LoadingScene: told to load, waiting for its SceneReady. Syncing: receiving spawns this tick. InGame: WelcomeDone sent.
 /// </summary>
-public enum ConnectionPhase : byte { LoadingScene, Syncing, InGame }
+public enum ConnectionPhase : byte { Authenticating, LoadingScene, Syncing, InGame }
 
 public sealed class NetworkConnection
 {
@@ -17,6 +18,8 @@ public sealed class NetworkConnection
     public bool IsBot { get; internal init; }
     public ConnectionPhase Phase { get; internal set; }
     internal uint ReadyLoadId;
+    internal long AuthStarted;
+    public object AuthData;
     public NetworkIdentity OwnedPlayer;
     public readonly HashSet<uint> Observing = [];
 }

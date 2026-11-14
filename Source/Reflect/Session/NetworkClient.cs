@@ -21,6 +21,8 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
     public bool Active { get; private set; }
     private bool _connected;
 
+    public IClientAuthenticator Authenticator;
+
     /// <summary>The scene the server told this client to be in.</summary>
     public SceneReference ActiveScene { get; private set; }
     public bool IsLoadingScene => _loadingScene != Guid.Empty;
@@ -79,6 +81,7 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
             _loadId = 0;
             _packetReader.SetBuffer(default);
             _r.SetBuffer(default);
+            Authenticator?.OnDisconnected();
             OnDisconnected?.Invoke(info);
         }
     }
@@ -158,7 +161,16 @@ public sealed class NetworkClient(ITransport transport, Dictionary<Guid, Prefab>
         Send(_w.ToSegment());
     }
 
-    private void OnTransportConnected() => _connected = true;
+    private void OnTransportConnected()
+    {
+        _connected = true;
+        if (Authenticator == null) return;
+        _w.Reset();
+        _w.BeginMessage(MsgType.Auth);
+        Authenticator.WritePayload(_w);
+        _w.FinishMessage();
+        Send(_w.ToSegment());
+    }
 
     private void OnTransportDisconnected(bool timedOut)
     {

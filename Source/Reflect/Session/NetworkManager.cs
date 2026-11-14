@@ -20,6 +20,9 @@ public class NetworkManager : GamePlugin
     public NetworkServer Server { get; private set; }
 
     public NetworkClient Client { get; private set; }
+    
+    public IServerAuthenticator ServerAuthenticator;
+    public IClientAuthenticator ClientAuthenticator;
 
     private ITransport _transport;
     private readonly Dictionary<Guid, Prefab> _registry = [];
@@ -93,7 +96,8 @@ public class NetworkManager : GamePlugin
         _accum = 0;
         Server = new NetworkServer(_transport, _registry)
         {
-            Interest = new GridInterest()
+            Interest = new GridInterest(),
+            Authenticator = ServerAuthenticator,
         };
         Server.Start();
         OnServerStarted?.Invoke();
@@ -109,7 +113,7 @@ public class NetworkManager : GamePlugin
             return;
         }
         ReloadSettings();
-        Client = new NetworkClient(_transport, _registry);
+        Client = new NetworkClient(_transport, _registry) { Authenticator = ClientAuthenticator };
         Client.OnDisconnected += info => OnClientDisconnected?.Invoke(info);
         Client.Connect();
     }

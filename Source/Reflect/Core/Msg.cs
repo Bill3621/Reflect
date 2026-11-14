@@ -15,7 +15,8 @@ public enum MsgType : byte
     TargetRpc = 7,
     LoadScene = 8,
     SceneReady = 9,
-    Disconnect = 10
+    Disconnect = 10,
+    Auth = 11
 }
 
 public static class Msg
