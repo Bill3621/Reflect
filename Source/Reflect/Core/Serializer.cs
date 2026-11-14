@@ -17,6 +17,8 @@ public static class Serializer<T>
     {
         if (typeof(T).IsEnum)
             Serializers.RegEnum<T>();
+        else
+            CollectionSerializers.TryRegister(typeof(T));
     }
 }
 
@@ -47,7 +49,7 @@ public static class Serializers
         Reg<NetworkRef>((w, v) => w.WriteUIntVar(v.NetId), r => new NetworkRef(r.ReadUIntVar()));
     }
 
-    private static void Reg<T>(WriteFunc<T> w, ReadFunc<T> r)
+    internal static void Reg<T>(WriteFunc<T> w, ReadFunc<T> r)
     {
         Serializer<T>.Write = w;
         Serializer<T>.Read = r;
@@ -68,7 +70,7 @@ public static class Serializers
 
     private static void EnsureRegistered(Type t)
     {
-        if (!t.IsEnum || Writers.ContainsKey(t)) return;
+        if (Writers.ContainsKey(t)) return;
         
         RuntimeHelpers.RunClassConstructor(typeof(Serializer<>).MakeGenericType(t).TypeHandle);
     }

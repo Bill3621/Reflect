@@ -56,7 +56,7 @@ Three protected methods on `NetworkScript` do the sending. Each takes the method
 - `SendClientRpc(string methodName, params object[] args)` sends a `[ClientRpc]` from the server to all observing clients.
 - `SendTargetRpc(NetworkConnection target, string methodName, params object[] args)` sends a `[TargetRpc]` from the server to one connection.
 
-Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, and `NetworkRef`. Enums register automatically, including `[Flags]` enums and all C# enum backing types. Passing another type with no registered serializer throws at send time.
+Arguments are serialized with the registered `Serializer<T>` for each parameter type. The built-in types cover `bool`, `byte`, `int`, `uint`, `long`, `ulong`, `float`, `string`, `Guid`, `Float3`, `Quaternion`, and `NetworkRef`. Enums register automatically, including `[Flags]` enums and all C# enum backing types. So do one-dimensional arrays and `List<T>` of any supported type, nested ones included (`int[]`, `List<NetworkRef>`, `List<Role[]>`); null is sent as null. Passing another type with no registered serializer throws at send time.
 
 `SendCommand` requires an active client. The other two require an active server. If the precondition is not met, Reflect logs an error and returns.
 

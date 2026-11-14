@@ -209,7 +209,7 @@ Reads primitives back from a byte buffer. Point it at a segment with `SetBuffer`
 
 ### Serializer&lt;T&gt;
 
-Generic static access point for per-type serializers. Enum types register themselves on first use.
+Generic static access point for per-type serializers. Enums, one-dimensional arrays and `List<T>` of supported types register themselves on first use.
 
 - `static WriteFunc<T> Write`
 - `static ReadFunc<T> Read`
